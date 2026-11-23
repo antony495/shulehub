@@ -1,124 +1,111 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ShuleHub – School management app for Kenya</title>
-<meta name="description" content="ShuleHub is a mobile app for schools, colleges, TVETs and universities in Kenya. Homework, results, attendance, announcements and fee records in one place.">
+<title>ShuleHub – Your School, Your Learning, Your Future</title>
+<meta name="description" content="ShuleHub is an Android app for primary schools, secondary schools, colleges, TVETs and universities in Kenya: homework, results, report cards, attendance, announcements and fee records.">
 <style>
-  :root {
-    --bg: #ffffff;
-    --text: #16302a;
-    --muted: #4f6a62;
-    --line: #cfe0da;
-    --accent: #1b6b5a;
-    --accent-text: #ffffff;
-    --card: #eaf4f1;
+  :root{
+    --bg:#f3f8f6; --card:#ffffff; --ink:#16302a; --muted:#4a625b;
+    --brand:#1b6b5a; --on-brand:#ffffff; --brand-soft:#e1eee9; --line:#c3d6cf; --accent:#b7791f;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0f1a17;
-      --text: #e4f1ed;
-      --muted: #9bb8af;
-      --line: #25403a;
-      --accent: #5fc3a8;
-      --accent-text: #08201a;
-      --card: #16261f;
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0f1a17; --card:#16241f; --ink:#e4f1ed; --muted:#b7ccc5;
+      --brand:#5fc3a8; --on-brand:#08201a; --brand-soft:#21332d; --line:#33463f; --accent:#f0c070;
     }
   }
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-    line-height: 1.6;
-  }
-  header, main, footer { max-width: 820px; margin: 0 auto; padding: 0 18px; }
-  header { padding-top: 28px; padding-bottom: 8px; }
-  h1 { color: var(--accent); font-size: 2.2rem; margin: 0; }
-  .tagline { color: var(--muted); margin: 4px 0 14px; font-size: 1.1rem; }
-  nav { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0 0; }
-  nav a { color: var(--accent); text-decoration: none; font-weight: 600; }
-  nav a:hover { text-decoration: underline; }
-  h2 { color: var(--accent); font-size: 1.4rem; margin: 40px 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
-  h3 { font-size: 1.05rem; margin: 14px 0 2px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin: 12px 0; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
-  .price { font-size: 1.6rem; font-weight: 700; color: var(--accent); margin: 4px 0; }
-  .todo { background: #fff3a3; color: #000; padding: 0 4px; border-radius: 3px; }
-  ol, ul { padding-left: 20px; }
-  a { color: var(--accent); }
-  footer { color: var(--muted); font-size: 0.92rem; padding-top: 30px; padding-bottom: 40px; border-top: 1px solid var(--line); margin-top: 44px; }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+  .wrap{max-width:900px;margin:0 auto;padding:0 16px 56px}
+  a{color:var(--brand)}
+  header{padding:28px 0 8px}
+  header h1{margin:0;font-size:2.2rem;line-height:1.1;color:var(--brand)}
+  header p{margin:.3em 0 0;color:var(--muted)}
+  nav{display:flex;flex-wrap:wrap;gap:6px 16px;margin:16px 0 8px}
+  nav a{font-weight:600;text-decoration:none}
+  h2{font-size:1.35rem;margin:2.2em 0 .6em;color:var(--brand);scroll-margin-top:12px}
+  h3{margin:.1em 0 .3em;font-size:1.05rem}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
+  .card p{margin:0;color:var(--muted)}
+  .soft{background:var(--brand-soft);border-color:transparent}
+  ol,ul{padding-left:1.25em}
+  li{margin:.4em 0}
+  .prices{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:12px 0}
+  .price{background:var(--card);border:2px solid var(--line);border-radius:18px;padding:18px;text-align:center}
+  .price.best{border-color:var(--brand)}
+  .price .amt{font-size:2rem;font-weight:700;color:var(--brand)}
+  .price .per{color:var(--muted)}
+  .tag{display:inline-block;background:var(--accent);color:#fff;border-radius:999px;padding:2px 10px;font-size:.8rem;font-weight:700;margin-bottom:6px}
+  @media (prefers-color-scheme: dark){ .tag{color:#2b1c00} }
+  footer{margin-top:3em;color:var(--muted);font-size:.9rem;border-top:1px solid var(--line);padding-top:16px}
 </style>
 </head>
 <body>
+<div class="wrap">
 
 <header>
   <h1>ShuleHub</h1>
-  <p class="tagline">Your School, Your Learning, Your Future</p>
+  <p>Your School, Your Learning, Your Future</p>
   <nav>
     <a href="#about">About</a>
     <a href="#how">How it works</a>
     <a href="#pricing">Pricing</a>
     <a href="#refunds">Refunds</a>
     <a href="#contact">Contact</a>
-    <a href="#delete-account">Delete account</a>
+    <a href="#delete">Delete account</a>
     <a href="privacy.html">Privacy policy</a>
   </nav>
 </header>
 
-<main>
-
 <h2 id="about">What ShuleHub is</h2>
-<p>
-  ShuleHub is a mobile app for Android that helps primary schools, secondary schools, colleges, TVETs and
-  universities in Kenya run their daily work. Institutions subscribe to use the software. ShuleHub
-  is software only: we do not sell physical goods, and we do not collect school fees on behalf of institutions.
-</p>
+<p>ShuleHub is a mobile app for Android that helps primary schools, secondary schools, colleges, TVETs and universities in Kenya run their daily work. Institutions subscribe to use the software. ShuleHub is software only: we do not sell physical goods, and we do not collect school fees on behalf of institutions.</p>
+
 <div class="grid">
-  <div class="card"><h3>Homework and marking</h3>Teachers set work, students submit it in the app, and teachers mark it and give feedback.</div>
-  <div class="card"><h3>Results</h3>Teachers publish marks and grades, and students see them in their own account.</div>
-  <div class="card"><h3>Attendance</h3>Teachers take the register for each class, and students and parents see the record.</div>
-  <div class="card"><h3>Announcements</h3>Notices go to the whole institution or to one class.</div>
-  <div class="card"><h3>Fee records</h3>The institution records what is charged and paid, and confirms M-Pesa payments that students and parents report.</div>
-  <div class="card"><h3>Parents</h3>A parent sees only their own child’s information, after the institution has confirmed the link.</div>
+  <div class="card soft"><h3>Homework and marking</h3><p>Teachers set work, students submit it in the app, and teachers mark it and give feedback.</p></div>
+  <div class="card soft"><h3>Results and grading</h3><p>Teachers publish marks and grades, and students see them in their own account. Each institution chooses its grading scale: CBC, 8-4-4 (KCSE style), TVET or university, and can edit it.</p></div>
+  <div class="card soft"><h3>Report cards</h3><p>A report card for each student with subjects, marks, grades, average and class position, plus teachers’ remarks and the principal’s remark. Students and parents see it in the app, and the school can print the report cards of a whole class at once as a PDF.</p></div>
+  <div class="card soft"><h3>Whole-class mark entry</h3><p>Teachers enter the marks of a whole class on one screen. The grade appears as they type.</p></div>
+  <div class="card soft"><h3>Attendance</h3><p>Teachers take the register for each class, and students and parents see the record.</p></div>
+  <div class="card soft"><h3>Announcements and events</h3><p>Notices go to the whole institution or to one class, and school events appear on the dashboards.</p></div>
+  <div class="card soft"><h3>Timetable</h3><p>Students, teachers and parents see the lessons that apply to them.</p></div>
+  <div class="card soft"><h3>Fee records</h3><p>The institution records what is charged and paid, and confirms M-Pesa payments that students and parents report. A payment can cover more than one term: the extra goes to the next unpaid fees. Administrators also get a fee arrears report.</p></div>
+  <div class="card soft"><h3>Library</h3><p>Teachers and administrators share study materials, and students save the ones they need. Reported items are reviewed by the school.</p></div>
+  <div class="card soft"><h3>Parents</h3><p>A parent sees only their own child’s information, after the institution has confirmed the link.</p></div>
+  <div class="card soft"><h3>English and Kiswahili</h3><p>Switch the app between English and Kiswahili in Settings. There is also a light and a dark display.</p></div>
+  <div class="card soft"><h3>Study browser</h3><p>Students can look up notes and definitions on the web without leaving the app.</p></div>
 </div>
 
 <h2 id="how">How it works for an institution</h2>
 <ol>
-  <li><strong>Register</strong> your institution in the app (choose Administrator, then Register your institution).</li>
-  <li><strong>We review</strong> the registration. This is to protect students’ and parents’ information.</li>
+  <li><strong>Register your institution</strong> in the app (choose Administrator, then Register your institution).</li>
+  <li><strong>We review the registration.</strong> This is to protect students’ and parents’ information.</li>
   <li><strong>Start your free trial.</strong> Once approved, you get a 30-day free trial and a school code.</li>
-  <li><strong>Set up.</strong> Create your classes, add teachers, and share the school code so students and parents can register.</li>
+  <li><strong>Set up.</strong> Use Quick setup to create your classes and subjects in one go (secondary Forms, CBC Grades 1 to 9, TVET/college or university), add teachers, choose your grading scale, and share the school code so students and parents can register.</li>
   <li><strong>Subscribe</strong> when you are ready to continue after the trial.</li>
 </ol>
 
 <h2 id="pricing">Pricing</h2>
-<p>
-  One price per institution, whatever its size. Prices are in Kenya shillings (KSh). Start with a 30-day free trial.
-  Pay monthly, or pay for a year.
-</p>
-<div class="grid">
-  <div class="card">
-    <h3>Monthly</h3>
-    <div class="price">KSh 1,500</div>
-    <div>per institution, per month</div>
+<p>One price per institution, whatever its size. Prices are in Kenya shillings (KSh). Start with a 30-day free trial. Pay monthly, or pay for a year.</p>
+<div class="prices">
+  <div class="price">
+    <div>Monthly</div>
+    <div class="amt">KSh 1,500</div>
+    <div class="per">per institution, per month</div>
   </div>
-  <div class="card">
-    <h3>Yearly</h3>
-    <div class="price">KSh 15,000</div>
-    <div>per institution, per year</div>
-    <div>Two months free: you pay for 10 months and get 12 (you save KSh 3,000).</div>
+  <div class="price best">
+    <span class="tag">Two months free</span>
+    <div>Yearly</div>
+    <div class="amt">KSh 15,000</div>
+    <div class="per">per institution, per year</div>
   </div>
 </div>
-<p>
-  Online payment by card or M-Pesa, through Paystack (a payment service provider licensed in Kenya), is coming
-  soon. Until it is live, we arrange payment with you directly. ShuleHub never sees or stores your card details.
-  We do not charge automatically: you renew by paying again when your subscription ends,
-  and you can stop at any time by simply not renewing.
-</p>
+<p>Two months free: you pay for 10 months and get 12 (you save KSh 3,000).</p>
+<p>Online payment by card or M-Pesa, through Paystack (a payment service provider licensed in Kenya), is coming soon. Until it is live, we arrange payment with you directly. ShuleHub never sees or stores your card details. We do not charge automatically: you renew by paying again when your subscription ends, and you can stop at any time by simply not renewing.</p>
 
 <h2 id="refunds">Refunds and cancellation</h2>
 <ul>
@@ -129,44 +116,24 @@
 </ul>
 
 <h2 id="contact">Contact us</h2>
-<p>
-  <strong>ShuleHub</strong> (operated by Antony Thiong’o)<br>
-  Email: <a href="mailto:antonythiongo06@gmail.com">antonythiongo06@gmail.com</a><br>
-  Phone / WhatsApp: <a href="tel:+254118174201">+254 118 174 201</a><br>
-  Location: Embu, Kenya
-</p>
+<p><strong>ShuleHub</strong> (operated by Antony Thiong’o)<br>
+Email: <a href="mailto:antonythiongo06@gmail.com">antonythiongo06@gmail.com</a><br>
+Phone / WhatsApp: <a href="tel:+254118174201">+254 118 174 201</a><br>
+Location: Embu, Kenya</p>
 
-<h2 id="delete-account">Delete your account</h2>
-<p>
-  You can ask for your ShuleHub account and its data to be deleted at any time.
-</p>
+<h2 id="delete">Delete your account</h2>
+<p>You can ask for your ShuleHub account and its data to be deleted at any time.</p>
 <ol>
-  <li><strong>Students, parents and teachers:</strong> open the app, log in, and tap <em>Request account deletion</em>
-    (on your profile for students, or at the bottom of your dashboard for parents and teachers).
-    The request goes to your institution’s administrator, who decides. Records the institution must
-    keep, such as results and fee records, may be kept by the institution.</li>
-  <li><strong>Institution administrators:</strong> log in, and tap <em>Request account deletion</em> on your dashboard.
-    The request comes to us.</li>
-  <li><strong>Cannot log in?</strong> Email
-    <a href="mailto:antonythiongo06@gmail.com?subject=Delete%20my%20ShuleHub%20account">antonythiongo06@gmail.com</a>
-    with the subject “Delete my ShuleHub account”. Include the name on the account, the email you registered with, and your institution’s name.
-    For a child’s account, write as the parent or guardian.</li>
+  <li><strong>Students, parents and teachers:</strong> open the app, log in, and tap <em>Request account deletion</em> (on your profile for students, or at the bottom of your dashboard for parents and teachers). The request goes to your institution’s administrator, who decides. Records the institution must keep, such as results, report cards and fee records, may be kept by the institution.</li>
+  <li><strong>Institution administrators:</strong> log in, and tap <em>Request account deletion</em> on your dashboard. The request comes to us.</li>
+  <li><strong>Cannot log in?</strong> Email <a href="mailto:antonythiongo06@gmail.com?subject=Delete%20my%20ShuleHub%20account">antonythiongo06@gmail.com</a> with the subject “Delete my ShuleHub account”. Include the name on the account, the email you registered with, and your institution’s name. For a child’s account, write as the parent or guardian.</li>
 </ol>
-<p>
-  We respond to every request within 14 days of receiving it. If it is approved, we delete the account and the
-  information linked to it within that time, and we tell you what was kept and why.
-</p>
-
-</main>
+<p>We respond to every request within 14 days of receiving it. If it is approved, we delete the account and the information linked to it within that time, and we tell you what was kept and why.</p>
 
 <footer>
-  <p>
-    © 2026 ShuleHub, Embu, Kenya &nbsp;|&nbsp;
-    <a href="privacy.html">Privacy policy</a> &nbsp;|&nbsp;
-    <a href="#delete-account">Delete your account</a> &nbsp;|&nbsp;
-    <a href="mailto:antonythiongo06@gmail.com">Contact</a>
-  </p>
+  &copy; 2026 ShuleHub, Embu, Kenya &nbsp;|&nbsp; <a href="privacy.html">Privacy policy</a> &nbsp;|&nbsp; <a href="#delete">Delete your account</a> &nbsp;|&nbsp; <a href="mailto:antonythiongo06@gmail.com">Contact</a>
 </footer>
 
+</div>
 </body>
 </html>
