@@ -83,3 +83,7 @@ footer.foot a{color:var(--brand)}
 .demo{background:var(--warn-bg);color:var(--warn);text-align:center;padding:6px;font-weight:700;font-size:.85rem}
 
 .hint a{color:var(--brand)}
+
+.topbtns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+button.card.child{display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer}
+button.card.child:hover{border-color:var(--brand)}

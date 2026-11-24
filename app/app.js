@@ -1,4 +1,4 @@
-/* ShuleHub Web - student portal (version 1)
+/* ShuleHub Web - student and parent portal (version 2)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
@@ -43,7 +43,7 @@ function friendlyAuthError(e) {
   return "Could not log in. Please try again.";
 }
 
-/* ---------- data layer ---------- */
+/* ---------- data layer (Firebase) ---------- */
 async function makeFirebase() {
   const base = "https://www.gstatic.com/firebasejs/10.14.1/";
   const [appM, authM, fs] = await Promise.all([
@@ -61,6 +61,7 @@ async function makeFirebase() {
       return s.exists() ? (s.get(field) || fallback) : fallback;
     } catch (e) { return fallback; }
   };
+  const docs = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
   return {
     onUser: (cb) => authM.onAuthStateChanged(auth, cb),
@@ -72,26 +73,32 @@ async function makeFirebase() {
       const s = await fs.getDoc(fs.doc(db, "students", uid));
       return s.exists() ? { id: s.id, ...s.data() } : null;
     },
-    async getInfo(st) {
+    async getParent(uid) {
+      const s = await fs.getDoc(fs.doc(db, "parents", uid));
+      return s.exists() ? { id: s.id, ...s.data() } : null;
+    },
+    async getLinks(parentUid) {
+      const q = fs.query(fs.collection(db, "parent_links"), fs.where("parentUid", "==", parentUid));
+      return docs(await fs.getDocs(q));
+    },
+    institutionName: (id) => nameOf(["institutions", id], "name", ""),
+    async getClassNames(st) {
       const { institutionId: i, programId: p, levelId: l, semesterId: s } = st;
-      if (!i) return {};
-      const inst = await nameOf(["institutions", i], "name", "");
-      if (!p) return { institution: inst };
+      if (!i || !p) return {};
       const program = await nameOf(["institutions", i, "programs", p], "programName", "");
       const level = l ? await nameOf(["institutions", i, "programs", p, "levels", l], "levelName", "") : "";
       const semester = (l && s)
         ? await nameOf(["institutions", i, "programs", p, "levels", l, "semesters", s], "semesterName", "") : "";
-      return { institution: inst, program, level, semester };
+      return { program, level, semester };
     },
-    async getFees(uid) {
-      const snap = await fs.getDocs(fs.collection(db, "students", uid, "fee_records"));
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    async getFees(sid) {
+      return docs(await fs.getDocs(fs.collection(db, "students", sid, "fee_records")));
     },
-    async getResults(uid) {
-      const snap = await fs.getDocs(fs.collection(db, "students", uid, "results"));
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((r) => r.published !== false);
+    async getResults(sid) {
+      return docs(await fs.getDocs(fs.collection(db, "students", sid, "results"))).filter((r) => r.published !== false);
     },
-    async getAttendance(st, uid) {
+    // a student reads the class registers and keeps only the rows that include them
+    async getStudentAttendance(st) {
       const q = fs.query(
         fs.collection(db, "attendance"),
         fs.where("institutionId", "==", st.institutionId || ""),
@@ -99,27 +106,60 @@ async function makeFirebase() {
         fs.where("levelId", "==", st.levelId || ""),
         fs.where("semesterId", "==", st.semesterId || "")
       );
-      const snap = await fs.getDocs(q);
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.records && a.records[uid]);
+      return docs(await fs.getDocs(q)).filter((a) => a.records && a.records[st.id]);
+    },
+    // a parent reads the child's own copy: students/{id}/attendance
+    async getChildAttendance(sid) {
+      return docs(await fs.getDocs(fs.collection(db, "students", sid, "attendance"))).map((r) => {
+        const status = r.status || r.attendance || (r.records && r.records[sid]) ||
+          (r.present === true ? "present" : r.present === false ? "absent" : "");
+        return { ...r, records: { [sid]: status }, notes: { [sid]: r.note || r.notes?.[sid] || "" } };
+      }).filter((r) => r.records[sid]);
+    },
+    async getTimetable(st) {
+      const q = fs.query(
+        fs.collection(db, "timetable_entries"),
+        fs.where("institutionId", "==", st.institutionId || ""),
+        fs.where("programId", "==", st.programId || ""),
+        fs.where("levelId", "==", st.levelId || ""),
+        fs.where("semesterId", "==", st.semesterId || "")
+      );
+      return docs(await fs.getDocs(q));
     },
   };
 }
 
+/* ---------- data layer (demo mode: sample data, no Firebase) ---------- */
 function makeDemo() {
-  let cb = null;
-  const st = { id: "demo", fullName: "Jane Wanjiru (demo)", email: "jane@example.com",
-    admission: "ADM-0142", institutionId: "i", programId: "p", levelId: "l", semesterId: "s" };
+  let cb = null, role = "student";
   const now = Date.now();
+  const kids = {
+    c1: { id: "c1", fullName: "Brian Otieno (demo)", admission: "ADM-0231", institutionId: "i", programId: "p", levelId: "l", semesterId: "s",
+          programName: "Secondary", levelName: "Form 2", semesterName: "Term 3" },
+    c2: { id: "c2", fullName: "Faith Otieno (demo)", admission: "ADM-0310", institutionId: "i", programId: "p", levelId: "l2", semesterId: "s",
+          programName: "Primary", levelName: "Grade 5", semesterName: "Term 3" },
+    demo: { id: "demo", fullName: "Jane Wanjiru (demo)", email: "jane@example.com", admission: "ADM-0142", institutionId: "i", programId: "p",
+          levelId: "l", semesterId: "s", programName: "Secondary", levelName: "Form 3", semesterName: "Term 3" },
+  };
   return {
     onUser: (f) => { cb = f; setTimeout(() => f(null), 0); return () => {}; },
-    signIn: async () => { setTimeout(() => cb && cb({ uid: "demo", email: st.email }), 50); },
+    signIn: async (email) => {
+      role = /parent/i.test(email) ? "parent" : "student";
+      setTimeout(() => cb && cb({ uid: role === "parent" ? "dp" : "demo", email }), 50);
+    },
     signOut: async () => { cb && cb(null); },
     resetPassword: async () => {},
-    getStudent: async () => st,
-    getInfo: async () => ({ institution: "Mwangaza Secondary School", program: "Secondary", level: "Form 3", semester: "Term 3" }),
-    getFees: async () => [
+    getStudent: async (uid) => kids[uid] || null,
+    getParent: async (uid) => (uid === "dp" ? { id: "dp", fullName: "Mrs Otieno (demo)", email: "parent@example.com", institutionId: "i", approved: true } : null),
+    getLinks: async () => [
+      { id: "dp_c1", studentUid: "c1", studentName: "Brian Otieno (demo)", admissionNumber: "ADM-0231" },
+      { id: "dp_c2", studentUid: "c2", studentName: "Faith Otieno (demo)", admissionNumber: "ADM-0310" },
+    ],
+    institutionName: async () => "Mwangaza Secondary School",
+    getClassNames: async () => ({}),
+    getFees: async (sid) => [
       { id: "1", description: "Term 1 fees", amountDue: 25000, amountPaid: 25000, dueDate: "2026-01-20", createdAt: now - 9e9 },
-      { id: "2", description: "Term 2 fees", amountDue: 25000, amountPaid: 12000, dueDate: "2026-05-05", createdAt: now - 6e9 },
+      { id: "2", description: "Term 2 fees", amountDue: 25000, amountPaid: sid === "c2" ? 25000 : 12000, dueDate: "2026-05-05", createdAt: now - 6e9 },
       { id: "3", description: "Term 3 fees", amountDue: 25000, amountPaid: 0, dueDate: "2026-09-01", createdAt: now - 3e9 },
       { id: "4", description: "Trip to Nairobi", amountDue: 3500, amountPaid: 0, dueDate: "2027-02-01", createdAt: now - 1e9 },
     ],
@@ -128,30 +168,44 @@ function makeDemo() {
       { id: "b", unitName: "English", marks: 64, totalMarks: 100, grade: "B", publishedAt: now - 30 * 864e5 },
       { id: "c", unitName: "Kiswahili", marks: 71, totalMarks: 100, grade: "B+", feedback: "Soma zaidi.", publishedAt: now - 30 * 864e5 },
     ],
-    getAttendance: async () => {
-      const rows = [], statuses = ["present", "present", "late", "present", "absent", "present", "excused", "present"];
-      statuses.forEach((s, i) => rows.push({ id: "m" + i, unitId: "u1", unitName: "Mathematics", unitCode: "MAT",
-        date: "2026-11-" + String(20 - i * 2).padStart(2, "0"), records: { demo: s }, notes: i === 4 ? { demo: "Sick" } : {} }));
-      ["present", "present", "absent"].forEach((s, i) => rows.push({ id: "e" + i, unitId: "u2", unitName: "English",
-        date: "2026-10-" + String(25 - i * 3).padStart(2, "0"), records: { demo: s }, notes: {} }));
-      return rows;
+    getStudentAttendance: async (st) => demoAtt(st.id),
+    getChildAttendance: async (sid) => demoAtt(sid),
+    getTimetable: async () => {
+      const t = (day, s, e, subject, room, teacherName) => ({ id: day + s, day, startTime: s, endTime: e, subject, room, teacherName });
+      return [t(1, "08:00", "08:40", "Mathematics", "Room 4", "Mr Kamau"), t(1, "08:40", "09:20", "English", "Room 4", "Ms Achieng"),
+        t(2, "08:00", "08:40", "Kiswahili", "Room 2", "Mrs Mwende"), t(3, "10:00", "10:40", "Chemistry", "Lab", "Mr Kiprop"),
+        t(3, "08:00", "08:40", "Mathematics", "Room 4", "Mr Kamau"), t(5, "09:00", "09:40", "Games", "", "")];
     },
   };
+  function demoAtt(sid) {
+    const rows = [], statuses = ["present", "present", "late", "present", "absent", "present", "excused", "present"];
+    statuses.forEach((s, i) => rows.push({ id: "m" + i, unitId: "u1", unitName: "Mathematics", unitCode: "MAT",
+      date: "2026-11-" + String(20 - i * 2).padStart(2, "0"), records: { [sid]: s }, notes: i === 4 ? { [sid]: "Sick" } : {} }));
+    ["present", "present", "absent"].forEach((s, i) => rows.push({ id: "e" + i, unitId: "u2", unitName: "English",
+      date: "2026-10-" + String(25 - i * 3).padStart(2, "0"), records: { [sid]: s }, notes: {} }));
+    return rows;
+  }
 }
 
 /* ---------- state ---------- */
-let api, user = null, student = null, info = {}, tab = "fees";
-const cache = {};
+let api, user = null;
+let role = "";           // "student" | "parent"
+let parent = null;       // parent profile (parents only)
+let children = [];       // links (parents only)
+let subject = null;      // the student whose data is on screen (the student, or the chosen child)
+let info = {};
+let tab = "fees";
 let attMonth = "all";
+let cache = {};
 
-/* ---------- screens ---------- */
+/* ---------- login screen ---------- */
 function showLogin(message, good) {
   root.innerHTML = `
-  ${DEMO ? '<div class="demo">DEMO MODE: sample data only</div>' : ""}
+  ${DEMO ? '<div class="demo">DEMO MODE: sample data only. Use an email containing "parent" for the parent view.</div>' : ""}
   <main class="login"><form class="login-card" id="loginForm" novalidate>
     <h1>ShuleHub</h1>
     <p class="tag">Your School, Your Learning, Your Future</p>
-    <h3>Student login</h3>
+    <h3>Student or parent login</h3>
     <label for="em">Email</label>
     <input id="em" type="email" autocomplete="username" inputmode="email" required>
     <label for="pw">Password</label>
@@ -162,7 +216,7 @@ function showLogin(message, good) {
     ${message ? `<p class="msg ${good ? "good" : ""}" role="alert">${esc(message)}</p>` : ""}
     <button class="btn" id="go" type="submit">LOG IN</button>
     <button class="linkbtn" type="button" id="forgot">Forgot password?</button>
-    <p class="hint">Parents, teachers and administrators: please use the ShuleHub app for now. Their web pages are coming soon.</p>
+    <p class="hint">Teachers and administrators: please use the ShuleHub app for now. Their web pages are coming soon.</p>
     <p class="hint"><a href="../privacy.html">Privacy policy</a> &middot; <a href="../index.html">About ShuleHub</a></p>
   </form></main>`;
   const em = document.getElementById("em"), pw = document.getElementById("pw");
@@ -188,40 +242,104 @@ function showLogin(message, good) {
   };
 }
 
+/* ---------- after login: work out who this is ---------- */
 async function enter(u) {
-  user = u;
+  user = u; role = ""; parent = null; children = []; subject = null; info = {}; cache = {};
   root.innerHTML = '<p class="boot">Loading your account…</p>';
   try {
-    student = await api.getStudent(u.uid);
+    const st = await api.getStudent(u.uid);
+    if (st) {
+      role = "student";
+      await openSubject(st);
+      return renderShell();
+    }
+    const p = await api.getParent(u.uid);
+    if (p) {
+      role = "parent";
+      parent = p;
+      if (p.approved !== true) return renderParentWaiting();
+      children = await api.getLinks(u.uid);
+      if (children.length === 1) {            // only one child: open it straight away
+        await openChild(children[0]);
+        return renderShell();
+      }
+      return renderParentHome();
+    }
   } catch (e) {
     await api.signOut();
     return showLogin("We could not open your account. Please check your internet and try again.");
   }
-  if (!student) {
-    await api.signOut();
-    return showLogin("This website is for student accounts. Parents, teachers and administrators: please use the ShuleHub app for now.");
-  }
-  try { info = await api.getInfo(student); } catch (e) { info = {}; }
-  Object.keys(cache).forEach((k) => delete cache[k]);
-  tab = "fees"; attMonth = "all";
-  renderShell();
+  await api.signOut();
+  showLogin("This website is for students and parents. Teachers and administrators: please use the ShuleHub app for now.");
 }
 
-function renderShell() {
-  const klass = [info.program, info.level, info.semester].filter(Boolean).join(" • ");
-  root.innerHTML = `
+async function openSubject(st) {
+  subject = st; cache = {}; tab = "fees"; attMonth = "all";
+  let names = { program: st.programName, level: st.levelName, semester: st.semesterName };
+  if (!names.program && role === "student") {
+    try { names = await api.getClassNames(st); } catch (e) { names = {}; }
+  }
+  let inst = "";
+  try { inst = st.institutionId ? await api.institutionName(st.institutionId) : ""; } catch (e) { /* ignore */ }
+  info = { institution: inst, ...names };
+}
+
+async function openChild(link) {
+  const st = await api.getStudent(link.studentUid);
+  if (!st) throw new Error("child not found");
+  await openSubject({ ...st, id: link.studentUid });
+}
+
+/* ---------- parent screens ---------- */
+function topBar(withBack) {
+  return `
   ${DEMO ? '<div class="demo">DEMO MODE: sample data only</div>' : ""}
   <header class="top"><div class="wrap">
-    <div><b>ShuleHub</b><div class="who">${esc(student.email || user.email || "")}</div></div>
-    <button id="out">LOG OUT</button>
-  </div></header>
+    <div><b>ShuleHub</b><div class="who">${esc(user.email || "")}</div></div>
+    <div class="topbtns">${withBack ? '<button id="back">MY CHILDREN</button>' : ""}<button id="out">LOG OUT</button></div>
+  </div></header>`;
+}
+
+function renderParentWaiting() {
+  root.innerHTML = `${topBar(false)}<main class="wrap">
+    <section class="hero"><h1>${esc(parent.fullName || "Parent")}</h1><p>Parent account</p></section>
+    <div class="note">Your school has not confirmed a child for you yet. Open the ShuleHub app, go to <b>Add child</b>, and enter your child's admission number. When the school's administrator confirms it, your child will appear here.</div>
+  </main>`;
+  document.getElementById("out").onclick = () => api.signOut();
+}
+
+function renderParentHome() {
+  root.innerHTML = `${topBar(false)}<main class="wrap">
+    <section class="hero"><h1>${esc(parent.fullName || "Parent")}</h1><p>Parent dashboard</p></section>
+    <h2>My children</h2>
+    ${children.length ? children.map((c, i) => `
+      <button class="card child" data-i="${i}"><div class="row"><div>
+        <h3>${esc(c.studentName || "Child")}</h3>
+        <div class="muted small">${c.admissionNumber ? "Adm: " + esc(c.admissionNumber) : ""}</div></div>
+        <span class="chip info">OPEN</span></div></button>`).join("")
+      : '<div class="empty">No child is linked to your account yet. Use the ShuleHub app to add a child.</div>'}
+    <footer class="foot">ShuleHub Web is read-only for now. To pay fees, use the ShuleHub app. &middot; <a href="../privacy.html">Privacy policy</a></footer>
+  </main>`;
+  document.getElementById("out").onclick = () => api.signOut();
+  root.querySelectorAll(".child").forEach((b) => (b.onclick = async () => {
+    b.disabled = true;
+    try { await openChild(children[Number(b.dataset.i)]); renderShell(); }
+    catch (e) { b.disabled = false; alert("Could not open this child. Please try again."); }
+  }));
+}
+
+/* ---------- shell shared by student and parent ---------- */
+function renderShell() {
+  const klass = [info.program, info.level, info.semester].filter(Boolean).join(" • ");
+  const canGoBack = role === "parent" && children.length > 1;
+  root.innerHTML = `${topBar(canGoBack)}
   <main class="wrap">
     <section class="hero">
-      <h1>${esc(student.fullName || "Student")}</h1>
-      <p>${esc(info.institution || "")}${klass ? "<br>" + esc(klass) : ""}${student.admission ? "<br>Adm: " + esc(student.admission) : ""}</p>
+      <h1>${esc(subject.fullName || "Student")}</h1>
+      <p>${esc(info.institution || "")}${klass ? "<br>" + esc(klass) : ""}${subject.admission || subject.admissionNumber ? "<br>Adm: " + esc(subject.admission || subject.admissionNumber) : ""}</p>
     </section>
     <nav class="tabs" role="tablist" aria-label="Sections">
-      ${[["fees", "FEES"], ["results", "RESULTS"], ["attendance", "ATTENDANCE"]].map(([k, t]) =>
+      ${[["fees", "FEES"], ["results", "RESULTS"], ["attendance", "ATTENDANCE"], ["timetable", "TIMETABLE"]].map(([k, t]) =>
         `<button class="tab" role="tab" data-tab="${k}" aria-selected="${k === tab}">${t}</button>`).join("")}
     </nav>
     <div id="view"></div>
@@ -229,32 +347,37 @@ function renderShell() {
       <a href="../privacy.html">Privacy policy</a></footer>
   </main>`;
   document.getElementById("out").onclick = () => api.signOut();
-  root.querySelectorAll(".tab").forEach((b) => (b.onclick = () => { tab = b.dataset.tab; renderShell(); }));
+  const back = document.getElementById("back");
+  if (back) back.onclick = () => { subject = null; cache = {}; renderParentHome(); };
+  root.querySelectorAll(".tab[data-tab]").forEach((b) => (b.onclick = () => { tab = b.dataset.tab; renderShell(); }));
   renderView();
 }
 
 async function renderView() {
   const view = document.getElementById("view");
   view.innerHTML = '<p class="muted" style="margin-top:18px">Loading…</p>';
-  const mine = tab;
+  const mine = tab, who = subject;
   try {
     let html;
     if (tab === "fees") {
-      cache.fees ??= await api.getFees(user.uid);
+      cache.fees ??= await api.getFees(who.id);
       html = feesHtml(cache.fees);
     } else if (tab === "results") {
-      cache.results ??= await api.getResults(user.uid);
+      cache.results ??= await api.getResults(who.id);
       html = resultsHtml(cache.results);
-    } else {
-      cache.att ??= await api.getAttendance(student, user.uid);
+    } else if (tab === "attendance") {
+      cache.att ??= role === "parent" ? await api.getChildAttendance(who.id) : await api.getStudentAttendance(who);
       html = attendanceHtml(cache.att);
+    } else {
+      cache.tt ??= await api.getTimetable(who);
+      html = timetableHtml(cache.tt);
     }
-    if (mine !== tab) return;
+    if (mine !== tab || who !== subject) return;
     view.innerHTML = html;
     view.querySelectorAll("[data-month]").forEach((b) => (b.onclick = () => { attMonth = b.dataset.month; renderView(); }));
   } catch (e) {
-    if (mine !== tab) return;
-    const denied = e && (e.code === "permission-denied");
+    if (mine !== tab || who !== subject) return;
+    const denied = e && e.code === "permission-denied";
     view.innerHTML = `<p class="msg" role="alert">${denied
       ? "You are not allowed to see this yet. Please try the ShuleHub app, or contact your school."
       : "Could not load this page. Please check your internet and try again."}</p>`;
@@ -263,7 +386,7 @@ async function renderView() {
 
 /* ---------- fees ---------- */
 function feesHtml(list) {
-  if (!list.length) return '<div class="empty">No fees have been recorded for you yet.</div>';
+  if (!list.length) return '<div class="empty">No fees have been recorded yet.</div>';
   const rows = list.map((f) => ({ ...f, due: num(f.amountDue ?? f.amount), paid: num(f.amountPaid) }))
     .sort((a, b) => String(a.dueDate || "").localeCompare(String(b.dueDate || "")) || ms(a.createdAt) - ms(b.createdAt));
   const billed = rows.reduce((s, r) => s + r.due, 0);
@@ -287,15 +410,15 @@ function feesHtml(list) {
     <div class="card"><div class="row"><div><h3>${esc(r.description || "Fee")}</h3>
       <div class="muted small">Charged ${ksh(r.due)} &middot; Paid ${ksh(r.paid)}${r.dueDate ? " &middot; Due " + esc(r.dueDate) : ""}</div></div>
       <span class="chip ${c}">${t}</span></div></div>`; }).join("")}
-  <p class="note">To pay, send the money by M-Pesa as your school instructs, then report the M-Pesa code in the ShuleHub app. Your school confirms it, and it shows here.</p>`;
+  <p class="note">To pay, send the money by M-Pesa as the school instructs, then report the M-Pesa code in the ShuleHub app. The school confirms it, and it shows here.</p>`;
 }
 
 /* ---------- results ---------- */
 function resultsHtml(list) {
-  if (!list.length) return '<div class="empty">No results have been published to your account yet. Please check again later.</div>';
+  if (!list.length) return '<div class="empty">No results have been published yet. Please check again later.</div>';
   const week = 7 * 864e5, nowMs = Date.now();
   const rows = [...list].sort((a, b) => (ms(b.publishedAt) || ms(b.createdAt)) - (ms(a.publishedAt) || ms(a.createdAt)));
-  return `<h2>My results and grades</h2>` + rows.map((r) => {
+  return `<h2>Results and grades</h2>` + rows.map((r) => {
     const name = r.unitName || r.subjectName || r.title || "Subject";
     const code = r.unitCode || r.subjectCode || "";
     const when = ms(r.publishedAt) || ms(r.createdAt);
@@ -322,8 +445,8 @@ function summary(statuses) {
 }
 
 function attendanceHtml(all) {
-  const uid = user.uid;
-  if (!all.length) return '<div class="empty">No attendance has been recorded for you yet.</div>';
+  const id = subject.id;
+  if (!all.length) return '<div class="empty">No attendance has been recorded yet.</div>';
   const sessions = [...all].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   const months = [...new Set(sessions.map((s) => monthKey(s.date)).filter(Boolean))].sort().reverse();
   if (attMonth !== "all" && !months.includes(attMonth)) attMonth = "all";
@@ -336,21 +459,35 @@ function attendanceHtml(all) {
 
   let html = `<div class="months">${chips}</div>
     <h2>${attMonth === "all" ? "All months" : esc(monthLabel(attMonth))}</h2>
-    <div class="card"><b>Overall:</b> ${esc(summary(shown.map((s) => s.records[uid])))}</div>`;
+    <div class="card"><b>Overall:</b> ${esc(summary(shown.map((s) => s.records[id])))}</div>`;
 
   if (attMonth === "all" && months.length) {
     html += `<h2>By month</h2>` + months.map((m) => `<div class="card"><b>${esc(monthLabel(m))}:</b> ${esc(summary(
-      sessions.filter((s) => monthKey(s.date) === m).map((s) => s.records[uid])))}</div>`).join("");
+      sessions.filter((s) => monthKey(s.date) === m).map((s) => s.records[id])))}</div>`).join("");
   }
   html += `<h2>By subject</h2>`;
   byUnit.forEach((list) => {
     const f = list[0];
     html += `<div class="card"><h3>${esc(f.unitName || "Subject")}${f.unitCode ? " (" + esc(f.unitCode) + ")" : ""}</h3>
-      <div class="muted small">${esc(summary(list.map((s) => s.records[uid])))}</div>
-      ${list.slice(0, 5).map((s) => { const note = s.notes && s.notes[uid];
-        return `<div class="small">${esc(s.date)}: ${esc(statusLabel(s.records[uid]))}${note ? " - " + esc(note) : ""}</div>`; }).join("")}</div>`;
+      <div class="muted small">${esc(summary(list.map((s) => s.records[id])))}</div>
+      ${list.slice(0, 5).map((s) => { const note = s.notes && s.notes[id];
+        return `<div class="small">${esc(s.date)}: ${esc(statusLabel(s.records[id]))}${note ? " - " + esc(note) : ""}</div>`; }).join("")}</div>`;
   });
   return html;
+}
+
+/* ---------- timetable ---------- */
+function timetableHtml(list) {
+  if (!list.length) return '<div class="empty">No timetable has been set up for this class yet.</div>';
+  const days = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const byDay = new Map();
+  [...list].sort((a, b) => String(a.startTime || "").localeCompare(String(b.startTime || "")))
+    .forEach((e) => { const d = num(e.day); byDay.set(d, [...(byDay.get(d) || []), e]); });
+  return [...byDay.keys()].sort((a, b) => a - b).map((d) => `
+    <h2>${esc(days[d] || "Day " + d)}</h2>` + byDay.get(d).map((e) => `
+    <div class="card"><div class="row"><div><h3>${esc(e.subject || "Lesson")}</h3>
+      <div class="muted small">${esc(e.room || "")}${e.room && e.teacherName ? " · " : ""}${esc(e.teacherName || "")}</div></div>
+      <span class="chip info">${esc(e.startTime || "")}${e.endTime ? "–" + esc(e.endTime) : ""}</span></div></div>`).join("")).join("");
 }
 
 /* ---------- start ---------- */
@@ -361,5 +498,5 @@ function attendanceHtml(all) {
     root.innerHTML = '<p class="boot">Could not start. Please check your internet connection and reload the page.</p>';
     return;
   }
-  api.onUser((u) => { if (u) enter(u); else { user = null; student = null; showLogin(); } });
+  api.onUser((u) => { if (u) enter(u); else { user = null; subject = null; showLogin(); } });
 })();
