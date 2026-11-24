@@ -103,3 +103,6 @@ select:focus{outline:2px solid var(--brand);border-color:var(--brand)}
   .card,.sum{break-inside:avoid;border-color:#999;background:#fff}
   .wrap{max-width:none;padding:0}
 }
+
+/* tabs wrap onto a second line so none are hidden */
+.tabs{flex-wrap:wrap;overflow-x:visible}
