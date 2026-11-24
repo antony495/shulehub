@@ -126,12 +126,36 @@ async function makeFirebase() {
       );
       return docs(await fs.getDocs(q));
     },
+    async getInstructions(institutionId) {
+      try {
+        const s = await fs.getDoc(fs.doc(db, "institutions", institutionId));
+        const v = s.exists() ? s.get("paymentInstructions") : "";
+        return typeof v === "string" ? v : "";
+      } catch (e) { return ""; }
+    },
+    async getPayments(sid, parentUid, isParent) {
+      const col = fs.collection(db, "payment_submissions");
+      if (!isParent) return docs(await fs.getDocs(fs.query(col, fs.where("studentUid", "==", sid))));
+      try {
+        return docs(await fs.getDocs(fs.query(col, fs.where("studentUid", "==", sid))));
+      } catch (e) {
+        if (e.code !== "permission-denied") throw e;
+        return docs(await fs.getDocs(fs.query(col, fs.where("parentUid", "==", parentUid))))
+          .filter((r) => r.studentUid === sid);
+      }
+    },
+    // the M-Pesa code is the document id, so sending the same code twice is refused by the rules
+    submitPayment: (data) => fs.setDoc(fs.doc(db, "payment_submissions", data.mpesaCode), data),
   };
 }
 
 /* ---------- data layer (demo mode: sample data, no Firebase) ---------- */
 function makeDemo() {
   let cb = null, role = "student";
+  const demoPays = [
+    { id: "QGH7K2LM9P", mpesaCode: "QGH7K2LM9P", amount: 12000, feeDescription: "Term 2 fees", status: "confirmed", createdAt: Date.now() - 20 * 864e5 },
+    { id: "RTX4P0QW1Z", mpesaCode: "RTX4P0QW1Z", amount: 5000, feeDescription: "Term 3 fees", status: "rejected", rejectReason: "Code not found in school M-Pesa statement", createdAt: Date.now() - 5 * 864e5 },
+  ];
   const now = Date.now();
   const kids = {
     c1: { id: "c1", fullName: "Brian Otieno (demo)", admission: "ADM-0231", institutionId: "i", programId: "p", levelId: "l", semesterId: "s",
@@ -170,6 +194,12 @@ function makeDemo() {
     ],
     getStudentAttendance: async (st) => demoAtt(st.id),
     getChildAttendance: async (sid) => demoAtt(sid),
+    getInstructions: async () => "Lipa na M-Pesa\nPaybill: 123456\nAccount number: the student's admission number\nThen type the M-Pesa code below.",
+    getPayments: async () => demoPays.slice(),
+    submitPayment: async (data) => {
+      if (demoPays.some((p) => p.mpesaCode === data.mpesaCode)) { const e = new Error("dup"); e.code = "permission-denied"; throw e; }
+      demoPays.push({ ...data, id: data.mpesaCode });
+    },
     getTimetable: async () => {
       const t = (day, s, e, subject, room, teacherName) => ({ id: day + s, day, startTime: s, endTime: e, subject, room, teacherName });
       return [t(1, "08:00", "08:40", "Mathematics", "Room 4", "Mr Kamau"), t(1, "08:40", "09:20", "English", "Room 4", "Ms Achieng"),
@@ -318,7 +348,7 @@ function renderParentHome() {
         <div class="muted small">${c.admissionNumber ? "Adm: " + esc(c.admissionNumber) : ""}</div></div>
         <span class="chip info">OPEN</span></div></button>`).join("")
       : '<div class="empty">No child is linked to your account yet. Use the ShuleHub app to add a child.</div>'}
-    <footer class="foot">ShuleHub Web is read-only for now. To pay fees, use the ShuleHub app. &middot; <a href="../privacy.html">Privacy policy</a></footer>
+    <footer class="foot">ShuleHub Web shows your school records. Report payments on the PAY tab. &middot; <a href="../privacy.html">Privacy policy</a></footer>
   </main>`;
   document.getElementById("out").onclick = () => api.signOut();
   root.querySelectorAll(".child").forEach((b) => (b.onclick = async () => {
@@ -339,11 +369,11 @@ function renderShell() {
       <p>${esc(info.institution || "")}${klass ? "<br>" + esc(klass) : ""}${subject.admission || subject.admissionNumber ? "<br>Adm: " + esc(subject.admission || subject.admissionNumber) : ""}</p>
     </section>
     <nav class="tabs" role="tablist" aria-label="Sections">
-      ${[["fees", "FEES"], ["results", "RESULTS"], ["attendance", "ATTENDANCE"], ["timetable", "TIMETABLE"]].map(([k, t]) =>
+      ${[["fees", "FEES"], ["pay", "PAY"], ["results", "RESULTS"], ["attendance", "ATTENDANCE"], ["timetable", "TIMETABLE"]].map(([k, t]) =>
         `<button class="tab" role="tab" data-tab="${k}" aria-selected="${k === tab}">${t}</button>`).join("")}
     </nav>
     <div id="view"></div>
-    <footer class="foot">ShuleHub Web is read-only for now. To pay fees, use the ShuleHub app. &middot;
+    <footer class="foot">ShuleHub Web shows your school records. Report payments on the PAY tab. &middot;
       <a href="../privacy.html">Privacy policy</a></footer>
   </main>`;
   document.getElementById("out").onclick = () => api.signOut();
@@ -365,6 +395,12 @@ async function renderView() {
     } else if (tab === "results") {
       cache.results ??= await api.getResults(who.id);
       html = resultsHtml(cache.results);
+    } else if (tab === "pay") {
+      cache.fees ??= await api.getFees(who.id);
+      cache.instr ??= await api.getInstructions(role === "parent" ? parent.institutionId : who.institutionId);
+      try { cache.pays ??= await api.getPayments(who.id, user.uid, role === "parent"); }
+      catch (e) { cache.pays = null; }
+      html = payHtml(cache.fees, cache.instr, cache.pays);
     } else if (tab === "attendance") {
       cache.att ??= role === "parent" ? await api.getChildAttendance(who.id) : await api.getStudentAttendance(who);
       html = attendanceHtml(cache.att);
@@ -374,6 +410,7 @@ async function renderView() {
     }
     if (mine !== tab || who !== subject) return;
     view.innerHTML = html;
+    if (tab === "pay") wirePay(view);
     view.querySelectorAll("[data-month]").forEach((b) => (b.onclick = () => { attMonth = b.dataset.month; renderView(); }));
   } catch (e) {
     if (mine !== tab || who !== subject) return;
@@ -410,7 +447,7 @@ function feesHtml(list) {
     <div class="card"><div class="row"><div><h3>${esc(r.description || "Fee")}</h3>
       <div class="muted small">Charged ${ksh(r.due)} &middot; Paid ${ksh(r.paid)}${r.dueDate ? " &middot; Due " + esc(r.dueDate) : ""}</div></div>
       <span class="chip ${c}">${t}</span></div></div>`; }).join("")}
-  <p class="note">To pay, send the money by M-Pesa as the school instructs, then report the M-Pesa code in the ShuleHub app. The school confirms it, and it shows here.</p>`;
+  <p class="note">To pay, open the PAY tab. Send the money by M-Pesa as the school instructs, then report the M-Pesa code there. The school confirms it, and it shows here.</p>`;
 }
 
 /* ---------- results ---------- */
@@ -488,6 +525,108 @@ function timetableHtml(list) {
     <div class="card"><div class="row"><div><h3>${esc(e.subject || "Lesson")}</h3>
       <div class="muted small">${esc(e.room || "")}${e.room && e.teacherName ? " · " : ""}${esc(e.teacherName || "")}</div></div>
       <span class="chip info">${esc(e.startTime || "")}${e.endTime ? "–" + esc(e.endTime) : ""}</span></div></div>`).join("")).join("");
+}
+
+/* ---------- pay fees ---------- */
+let payNotice = "";
+
+function payHtml(fees, instr, pays) {
+  const open = fees.map((f) => ({ ...f, due: num(f.amountDue ?? f.amount), paid: num(f.amountPaid) }))
+    .map((r) => ({ ...r, bal: r.due - r.paid }))
+    .filter((r) => r.bal > 0)
+    .sort((a, b) => String(a.dueDate || "").localeCompare(String(b.dueDate || "")) || ms(a.createdAt) - ms(b.createdAt));
+  const total = open.reduce((s, r) => s + r.bal, 0);
+  const chipFor = { pending: ["WAITING", "warn"], confirmed: ["CONFIRMED", "ok"], rejected: ["REJECTED", "bad"] };
+
+  const notice = payNotice ? `<p class="msg good" role="status">${esc(payNotice)}</p>` : "";
+  payNotice = "";
+
+  const how = `<h2>How to pay</h2><div class="card instr">${esc(instr || "Send the money by M-Pesa as your school instructs, then type the M-Pesa code below.")}</div>`;
+
+  const form = open.length ? `
+    <h2>Report your payment</h2>
+    <form class="card" id="payForm" data-total="${total}" novalidate>
+      <label for="payFee">Which fee are you paying?</label>
+      <select id="payFee">${open.map((r) => `<option value="${esc(r.id)}" data-bal="${r.bal}" data-desc="${esc(r.description || "Fee")}">${esc(r.description || "Fee")} (balance ${esc(ksh(r.bal))})</option>`).join("")}</select>
+      <label for="payAmt">Amount you sent (KSh)</label>
+      <input id="payAmt" type="number" inputmode="decimal" min="1" max="1000000" step="any" value="${open[0].bal}">
+      <div class="qbtns"><button type="button" class="tab" id="qThis">THIS FEE</button><button type="button" class="tab" id="qAll">ALL FEES (${esc(ksh(total))})</button></div>
+      <p class="muted small">You can pay more than one fee at once. The extra goes to your next unpaid fees when the school confirms.</p>
+      <label for="payCode">M-Pesa code</label>
+      <input id="payCode" type="text" maxlength="10" autocomplete="off" autocapitalize="characters" placeholder="e.g. QGH7K2LM9P">
+      <label for="payPhone">Phone number you paid from</label>
+      <input id="payPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="e.g. 0712345678">
+      <p class="msg" id="payMsg" role="alert" hidden></p>
+      <button class="btn" id="payGo" type="submit">SEND PAYMENT REPORT</button>
+    </form>` : '<div class="empty">There are no unpaid fees to pay right now.</div>';
+
+  let hist;
+  if (pays === null) hist = '<p class="muted small">Your earlier payment reports could not be loaded.</p>';
+  else if (!pays.length) hist = '<div class="empty">You have not reported any payment yet.</div>';
+  else hist = [...pays].sort((a, b) => ms(b.createdAt) - ms(a.createdAt)).map((p) => {
+    const [t, c] = chipFor[p.status] || [String(p.status || "").toUpperCase(), "info"];
+    const when = ms(p.createdAt) ? new Date(ms(p.createdAt)).toLocaleDateString("en-GB") : "";
+    return `<div class="card"><div class="row"><div><h3>${esc(ksh(p.amount))} &middot; ${esc(p.mpesaCode || p.id)}</h3>
+      <div class="muted small">${esc(p.feeDescription || "")}${when ? " &middot; " + esc(when) : ""}</div>
+      ${p.status === "rejected" && p.rejectReason ? `<div class="small">Reason: ${esc(p.rejectReason)}</div>` : ""}</div>
+      <span class="chip ${c}">${esc(t)}</span></div></div>`;
+  }).join("");
+
+  return `${notice}<div class="grid3"><div class="sum bal"><div class="k">TOTAL BALANCE</div><div class="v">${esc(ksh(total))}</div></div></div>
+    ${how}${form}<h2>My payment reports</h2>${hist}`;
+}
+
+function wirePay(view) {
+  const form = view.querySelector("#payForm");
+  if (!form) return;
+  const feeSel = form.querySelector("#payFee"), amt = form.querySelector("#payAmt");
+  const code = form.querySelector("#payCode"), phoneEl = form.querySelector("#payPhone");
+  const msg = form.querySelector("#payMsg"), go = form.querySelector("#payGo");
+  const balOf = () => Number(feeSel.selectedOptions[0]?.dataset.bal || 0);
+  const say = (t) => { msg.textContent = t; msg.hidden = false; };
+
+  feeSel.onchange = () => { amt.value = balOf() || ""; };
+  form.querySelector("#qThis").onclick = () => { amt.value = balOf() || ""; };
+  form.querySelector("#qAll").onclick = () => { amt.value = Number(form.dataset.total) || ""; };
+  code.oninput = () => { code.value = code.value.toUpperCase().replace(/[^A-Z0-9]/g, ""); };
+
+  form.onsubmit = async (ev) => {
+    ev.preventDefault();
+    msg.hidden = true;
+    const amount = Number(amt.value);
+    const mcode = code.value.trim();
+    const phone = phoneEl.value.replace(/[\s-]+/g, "");
+    const feeId = feeSel.value;
+    const feeDesc = feeSel.selectedOptions[0]?.dataset.desc || "";
+    if (!feeId) return say("Please choose which fee you are paying.");
+    if (!Number.isFinite(amount) || amount <= 0) return say("Please enter the amount you sent.");
+    if (amount > 1000000) return say("The amount is too large. The most you can send in one payment is KSh 1,000,000.");
+    if (!/^[A-Z0-9]{10}$/.test(mcode)) return say("The M-Pesa code must be 10 letters and numbers, for example QGH7K2LM9P.");
+    if (!/^(\+?254|0)[17]\d{8}$/.test(phone)) return say("Please enter the phone number you paid from, for example 0712345678.");
+
+    const data = {
+      studentUid: subject.id,
+      studentName: subject.fullName || "",
+      admissionNumber: subject.admissionNumber || subject.admission || "",
+      institutionId: role === "parent" ? parent.institutionId : subject.institutionId,
+      feeId, feeDescription: feeDesc, amount, mpesaCode: mcode, phone,
+      status: "pending", createdAt: Date.now(),
+    };
+    if (role === "parent") { data.parentUid = user.uid; data.parentName = parent.fullName || ""; }
+
+    go.disabled = true; go.textContent = "Sending…";
+    try {
+      await api.submitPayment(data);
+      payNotice = "Payment report sent. The school will confirm it, and then it shows in your fees.";
+      delete cache.pays;
+      renderView();
+    } catch (e) {
+      go.disabled = false; go.textContent = "SEND PAYMENT REPORT";
+      if (e && e.code === "permission-denied")
+        say("This M-Pesa code has already been submitted, or it was not accepted. Check the code, and check that your device's date and time are correct.");
+      else say("Could not send. Please check your internet and try again.");
+    }
+  };
 }
 
 /* ---------- start ---------- */
