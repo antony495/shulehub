@@ -1,4 +1,4 @@
-/* ShuleHub Web - student and parent portal (version 2)
+/* ShuleHub Web - student and parent portal (version 3, with PAY tab)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
