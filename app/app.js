@@ -1,4 +1,4 @@
-/* ShuleHub Web - student and parent portal (version 3, with PAY tab)
+/* ShuleHub Web - student and parent portal (version 4, with REPORT CARD tab)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
@@ -144,6 +144,29 @@ async function makeFirebase() {
           .filter((r) => r.studentUid === sid);
       }
     },
+    // everything a report card needs besides the results; each part fails on its own
+    async getReportCard(st) {
+      const inst = st.institutionId || "";
+      const out = { scheme: null, settings: {}, summaries: [], remarks: [] };
+      if (inst) {
+        try {
+          const d = await fs.getDoc(fs.doc(db, "institutions", inst, "settings", "grading"));
+          const raw = d.exists() ? d.get("bands") : null;
+          if (Array.isArray(raw)) {
+            const bands = raw.filter((m) => m && typeof m.grade === "string")
+              .map((m) => ({ min: num(m.min), grade: m.grade, points: num(m.points), remark: m.remark || "" }));
+            if (bands.length) out.scheme = { name: d.get("name") || "Custom", bands, passMark: num(d.get("passMark")) || 40 };
+          }
+        } catch (e) { /* no scale */ }
+        try {
+          const d = await fs.getDoc(fs.doc(db, "institutions", inst, "settings", "reportCard"));
+          if (d.exists()) out.settings = d.data();
+        } catch (e) { /* no settings */ }
+      }
+      try { out.summaries = docs(await fs.getDocs(fs.collection(db, "students", st.id, "report_summaries"))); } catch (e) { /* none */ }
+      try { out.remarks = docs(await fs.getDocs(fs.collection(db, "students", st.id, "teacherRemarks"))); } catch (e) { /* none */ }
+      return out;
+    },
     // the M-Pesa code is the document id, so sending the same code twice is refused by the rules
     submitPayment: (data) => fs.setDoc(fs.doc(db, "payment_submissions", data.mpesaCode), data),
   };
@@ -188,10 +211,24 @@ function makeDemo() {
       { id: "4", description: "Trip to Nairobi", amountDue: 3500, amountPaid: 0, dueDate: "2027-02-01", createdAt: now - 1e9 },
     ],
     getResults: async () => [
-      { id: "a", unitName: "Mathematics", unitCode: "MAT", marks: 78, totalMarks: 100, grade: "A-", feedback: "Very good work. Keep it up.", publishedAt: now - 2 * 864e5 },
-      { id: "b", unitName: "English", marks: 64, totalMarks: 100, grade: "B", publishedAt: now - 30 * 864e5 },
-      { id: "c", unitName: "Kiswahili", marks: 71, totalMarks: 100, grade: "B+", feedback: "Soma zaidi.", publishedAt: now - 30 * 864e5 },
+      { id: "a", unitName: "Mathematics", unitCode: "MAT", marks: 78, totalMarks: 100, grade: "A-", points: 11, assessment: "End of term", feedback: "Very good work. Keep it up.", publishedAt: now - 2 * 864e5 },
+      { id: "b", unitName: "English", marks: 64, totalMarks: 100, grade: "B", points: 9, assessment: "End of term", publishedAt: now - 2 * 864e5 },
+      { id: "c", unitName: "Kiswahili", marks: 71, totalMarks: 100, grade: "B+", points: 10, assessment: "End of term", feedback: "Soma zaidi.", publishedAt: now - 2 * 864e5 },
+      { id: "d", unitName: "Mathematics", unitCode: "MAT", marks: 55, totalMarks: 100, grade: "C+", points: 7, assessment: "Mid-term", publishedAt: now - 40 * 864e5 },
+      { id: "e", unitName: "English", marks: 60, totalMarks: 100, grade: "B-", points: 8, assessment: "Mid-term", publishedAt: now - 40 * 864e5 },
     ],
+    getReportCard: async () => ({
+      scheme: { name: "Secondary", passMark: 40, bands: [
+        { min: 80, grade: "A", points: 12, remark: "Excellent" }, { min: 75, grade: "A-", points: 11, remark: "Very good" },
+        { min: 70, grade: "B+", points: 10, remark: "Good" }, { min: 65, grade: "B", points: 9, remark: "Good" },
+        { min: 60, grade: "B-", points: 8, remark: "Fairly good" }, { min: 55, grade: "C+", points: 7, remark: "Fair" },
+        { min: 0, grade: "E", points: 1, remark: "Very poor" }] },
+      settings: { principalName: "Mrs R. Njeri", closingDate: "2026-11-27", nextTermDate: "2027-01-11" },
+      summaries: [{ id: "end_of_term", position: 4, outOf: 52, principalRemark: "A steady and hardworking student. Keep it up." },
+                  { id: "mid_term", position: 9, outOf: 52, principalRemark: "" }],
+      remarks: [{ id: "r1", text: "Participates well in class and is improving.", teacherName: "Mr Kamau", createdAt: now - 3 * 864e5 },
+                { id: "r2", text: "Needs to submit homework on time.", teacherName: "Ms Achieng", createdAt: now - 9 * 864e5 }],
+    }),
     getStudentAttendance: async (st) => demoAtt(st.id),
     getChildAttendance: async (sid) => demoAtt(sid),
     getInstructions: async () => "Lipa na M-Pesa\nPaybill: 123456\nAccount number: the student's admission number\nThen type the M-Pesa code below.",
@@ -226,6 +263,7 @@ let subject = null;      // the student whose data is on screen (the student, or
 let info = {};
 let tab = "fees";
 let attMonth = "all";
+let rcExam = "";         // the exam chosen on the report card
 let cache = {};
 
 /* ---------- login screen ---------- */
@@ -304,7 +342,7 @@ async function enter(u) {
 }
 
 async function openSubject(st) {
-  subject = st; cache = {}; tab = "fees"; attMonth = "all";
+  subject = st; cache = {}; tab = "fees"; attMonth = "all"; rcExam = "";
   let names = { program: st.programName, level: st.levelName, semester: st.semesterName };
   if (!names.program && role === "student") {
     try { names = await api.getClassNames(st); } catch (e) { names = {}; }
@@ -369,7 +407,7 @@ function renderShell() {
       <p>${esc(info.institution || "")}${klass ? "<br>" + esc(klass) : ""}${subject.admission || subject.admissionNumber ? "<br>Adm: " + esc(subject.admission || subject.admissionNumber) : ""}</p>
     </section>
     <nav class="tabs" role="tablist" aria-label="Sections">
-      ${[["fees", "FEES"], ["pay", "PAY"], ["results", "RESULTS"], ["attendance", "ATTENDANCE"], ["timetable", "TIMETABLE"]].map(([k, t]) =>
+      ${[["fees", "FEES"], ["pay", "PAY"], ["results", "RESULTS"], ["report", "REPORT CARD"], ["attendance", "ATTENDANCE"], ["timetable", "TIMETABLE"]].map(([k, t]) =>
         `<button class="tab" role="tab" data-tab="${k}" aria-selected="${k === tab}">${t}</button>`).join("")}
     </nav>
     <div id="view"></div>
@@ -401,6 +439,10 @@ async function renderView() {
       try { cache.pays ??= await api.getPayments(who.id, user.uid, role === "parent"); }
       catch (e) { cache.pays = null; }
       html = payHtml(cache.fees, cache.instr, cache.pays);
+    } else if (tab === "report") {
+      cache.results ??= await api.getResults(who.id);
+      cache.rc ??= await api.getReportCard(who);
+      html = reportHtml(cache.results, cache.rc);
     } else if (tab === "attendance") {
       cache.att ??= role === "parent" ? await api.getChildAttendance(who.id) : await api.getStudentAttendance(who);
       html = attendanceHtml(cache.att);
@@ -411,6 +453,7 @@ async function renderView() {
     if (mine !== tab || who !== subject) return;
     view.innerHTML = html;
     if (tab === "pay") wirePay(view);
+    if (tab === "report") wireReport(view);
     view.querySelectorAll("[data-month]").forEach((b) => (b.onclick = () => { attMonth = b.dataset.month; renderView(); }));
   } catch (e) {
     if (mine !== tab || who !== subject) return;
@@ -525,6 +568,89 @@ function timetableHtml(list) {
     <div class="card"><div class="row"><div><h3>${esc(e.subject || "Lesson")}</h3>
       <div class="muted small">${esc(e.room || "")}${e.room && e.teacherName ? " · " : ""}${esc(e.teacherName || "")}</div></div>
       <span class="chip info">${esc(e.startTime || "")}${e.endTime ? "–" + esc(e.endTime) : ""}</span></div></div>`).join("")).join("");
+}
+
+/* ---------- report card ---------- */
+const rcNum = (n) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10));
+const rcPretty = (s) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || "");
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : String(s || "");
+};
+const slug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+const bandFor = (scheme, percent) => scheme
+  ? ([...scheme.bands].sort((a, b) => b.min - a.min).find((b) => percent >= b.min) || null) : null;
+
+function reportHtml(all, rc) {
+  const rows = all.filter((r) => typeof r.marks === "number" && typeof r.totalMarks === "number").map((r) => ({
+    subject: r.unitName || r.subjectName || "Subject", code: r.unitCode || r.subjectCode || "",
+    marks: r.marks, total: r.totalMarks, grade: r.grade || "-", points: num(r.points),
+    comment: r.feedback || r.gradeRemark || "", assessment: r.assessment || "End of term", publishedAt: ms(r.publishedAt),
+  }));
+  if (!rows.length) return '<div class="empty">No results have been published yet, so there is no report card.</div>';
+
+  const exams = [...new Set(rows.map((r) => r.assessment))];
+  if (!exams.includes(rcExam)) rcExam = [...rows].sort((a, b) => b.publishedAt - a.publishedAt)[0].assessment;
+  const shown = rows.filter((r) => r.assessment === rcExam).sort((a, b) => a.subject.toLowerCase().localeCompare(b.subject.toLowerCase()));
+
+  const pct = (r) => (r.total > 0 ? (r.marks / r.total) * 100 : 0);
+  const gradeOf = (r) => (r.grade && r.grade !== "-" ? r.grade : (bandFor(rc.scheme, pct(r))?.grade || "-"));
+  const sumMarks = shown.reduce((s, r) => s + r.marks, 0);
+  const sumTotal = shown.reduce((s, r) => s + r.total, 0);
+  const average = shown.reduce((s, r) => s + pct(r), 0) / shown.length;
+  const usesPoints = shown.some((r) => r.points > 0);
+  const meanPoints = shown.reduce((s, r) => s + r.points, 0) / shown.length;
+  const meanBand = usesPoints && rc.scheme
+    ? [...rc.scheme.bands].sort((a, b) => Math.abs(a.points - meanPoints) - Math.abs(b.points - meanPoints) || b.points - a.points)[0] : null;
+  const overall = bandFor(rc.scheme, average);
+
+  const summ = rc.summaries.find((x) => slug(x.id) === slug(rcExam) || (x.assessment && slug(x.assessment) === slug(rcExam)));
+  const position = summ && Number.isFinite(Number(summ.position)) && Number.isFinite(Number(summ.outOf))
+    ? `${Number(summ.position)} out of ${Number(summ.outOf)}` : "";
+  const principalRemark = (summ && summ.principalRemark) || "";
+  const remarks = [...rc.remarks].sort((a, b) => ms(b.createdAt) - ms(a.createdAt)).slice(0, 3).filter((r) => r.text);
+  const set = rc.settings || {};
+  const scale = rc.scheme ? [...rc.scheme.bands].sort((a, b) => b.min - a.min).map((b) => `${b.grade} ${rcNum(b.min)}%+`).join("  |  ") : "";
+  const klass = [info.program, info.level, info.semester].filter(Boolean).join(" • ");
+
+  const examChips = exams.length > 1 ? `<div class="months noprint">${exams.map((e) =>
+    `<button class="tab" data-exam="${esc(e)}" aria-selected="${e === rcExam}">${esc(e.toUpperCase())}</button>`).join("")}</div>` : "";
+
+  return `
+  ${examChips}
+  <section class="paper">
+    <div class="paperhead">
+      <h2>REPORT CARD</h2>
+      ${info.institution ? `<div><b>${esc(info.institution)}</b></div>` : ""}
+      <div>${esc(subject.fullName || "")}</div>
+      <div class="muted small">${subject.admissionNumber || subject.admission ? "Admission no: " + esc(subject.admissionNumber || subject.admission) : ""}${klass ? " &middot; " + esc(klass) : ""}</div>
+      <div class="chip info" style="margin-top:8px">${esc(rcExam.toUpperCase())}</div>
+    </div>
+    ${shown.map((r) => `
+    <div class="card"><div class="row"><div><h3>${esc(r.subject)}${r.code ? " (" + esc(r.code) + ")" : ""}</h3>
+      <div>Marks: ${esc(rcNum(r.marks))} / ${esc(rcNum(r.total))} (${esc(rcNum(pct(r)))}%)</div>
+      ${r.comment ? `<div class="muted small">${esc(r.comment)}</div>` : ""}</div>
+      <span class="chip ok">${esc(gradeOf(r))}</span></div></div>`).join("")}
+
+    <div class="grid3">
+      <div class="sum"><div class="k">TOTAL</div><div class="v">${esc(rcNum(sumMarks))} / ${esc(rcNum(sumTotal))}</div></div>
+      <div class="sum"><div class="k">AVERAGE</div><div class="v">${esc(rcNum(average))}%${overall ? " &middot; " + esc(overall.grade) : ""}</div></div>
+      ${position ? `<div class="sum"><div class="k">CLASS POSITION</div><div class="v">${esc(position)}</div></div>` : ""}
+      ${usesPoints ? `<div class="sum"><div class="k">MEAN POINTS${meanBand ? " &middot; MEAN GRADE" : ""}</div><div class="v">${esc(meanPoints.toFixed(2))}${meanBand ? " &middot; " + esc(meanBand.grade) : ""}</div></div>` : ""}
+    </div>
+    ${overall && overall.remark ? `<p class="note">Overall: ${esc(overall.remark)}</p>` : ""}
+
+    ${remarks.length ? `<h2>Teacher's remarks</h2>${remarks.map((r) => `<div class="card">${esc(r.text)}<div class="muted small">— ${esc(r.teacherName || "Teacher")}</div></div>`).join("")}` : ""}
+    ${principalRemark ? `<h2>Principal's remark</h2><div class="card">${esc(principalRemark)}${set.principalName ? `<div class="muted small">— ${esc(set.principalName)}</div>` : ""}</div>` : ""}
+    ${set.closingDate || set.nextTermDate ? `<p class="small">${set.closingDate ? "Closing date: <b>" + esc(rcPretty(set.closingDate)) + "</b>" : ""}${set.closingDate && set.nextTermDate ? " &middot; " : ""}${set.nextTermDate ? "Next term opens: <b>" + esc(rcPretty(set.nextTermDate)) + "</b>" : ""}</p>` : ""}
+    ${scale ? `<p class="muted small">Grading scale: ${esc(scale)}</p>` : ""}
+  </section>
+  <button class="btn noprint" id="rcPrint" type="button">PRINT OR SAVE AS PDF</button>`;
+}
+
+function wireReport(view) {
+  view.querySelectorAll("[data-exam]").forEach((b) => (b.onclick = () => { rcExam = b.dataset.exam; renderView(); }));
+  const p = view.querySelector("#rcPrint");
+  if (p) p.onclick = () => window.print();
 }
 
 /* ---------- pay fees ---------- */
