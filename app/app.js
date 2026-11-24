@@ -1,0 +1,365 @@
+/* ShuleHub Web - student portal (version 1)
+   Uses the same Firebase project as the Android app. Read-only for now. */
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCvJp9KbTQW7YS63KoB7u4sys7g6KiBU1I",
+  authDomain: "shulehub-27715.firebaseapp.com",
+  projectId: "shulehub-27715",
+  storageBucket: "shulehub-27715.firebasestorage.app",
+  messagingSenderId: "127741742820",
+  appId: "1:127741742820:web:875617db22f690011266f1"
+};
+
+const DEMO = new URLSearchParams(location.search).has("demo");
+const root = document.getElementById("app");
+
+/* ---------- small helpers ---------- */
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ksh = (n) => "KSh " + Math.round(Number(n) || 0).toLocaleString("en-KE");
+const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+const ms = (v) => (v && typeof v.toMillis === "function" ? v.toMillis() : num(v));
+const todayStr = () => {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+};
+const monthKey = (date) => (/^\d{4}-\d{2}/.test(date || "") ? date.slice(0, 7) : "");
+const monthLabel = (key) => {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleString("en-GB", { month: "long", year: "numeric" });
+};
+
+function friendlyAuthError(e) {
+  const code = (e && e.code) || "";
+  if (code.includes("invalid-credential") || code.includes("wrong-password") ||
+      code.includes("user-not-found") || code.includes("invalid-email"))
+    return "Wrong email or password. Please try again.";
+  if (code.includes("too-many-requests"))
+    return "Too many attempts. Please wait a few minutes and try again.";
+  if (code.includes("network"))
+    return "No internet connection. Please check it and try again.";
+  if (code.includes("unauthorized-domain"))
+    return "This website address is not allowed yet. Ask ShuleHub support to add it.";
+  return "Could not log in. Please try again.";
+}
+
+/* ---------- data layer ---------- */
+async function makeFirebase() {
+  const base = "https://www.gstatic.com/firebasejs/10.14.1/";
+  const [appM, authM, fs] = await Promise.all([
+    import(base + "firebase-app.js"),
+    import(base + "firebase-auth.js"),
+    import(base + "firebase-firestore.js"),
+  ]);
+  const app = appM.initializeApp(firebaseConfig);
+  const auth = authM.getAuth(app);
+  const db = fs.getFirestore(app);
+
+  const nameOf = async (path, field, fallback) => {
+    try {
+      const s = await fs.getDoc(fs.doc(db, ...path));
+      return s.exists() ? (s.get(field) || fallback) : fallback;
+    } catch (e) { return fallback; }
+  };
+
+  return {
+    onUser: (cb) => authM.onAuthStateChanged(auth, cb),
+    signIn: (email, pw) => authM.signInWithEmailAndPassword(auth, email, pw),
+    signOut: () => authM.signOut(auth),
+    resetPassword: (email) => authM.sendPasswordResetEmail(auth, email),
+
+    async getStudent(uid) {
+      const s = await fs.getDoc(fs.doc(db, "students", uid));
+      return s.exists() ? { id: s.id, ...s.data() } : null;
+    },
+    async getInfo(st) {
+      const { institutionId: i, programId: p, levelId: l, semesterId: s } = st;
+      if (!i) return {};
+      const inst = await nameOf(["institutions", i], "name", "");
+      if (!p) return { institution: inst };
+      const program = await nameOf(["institutions", i, "programs", p], "programName", "");
+      const level = l ? await nameOf(["institutions", i, "programs", p, "levels", l], "levelName", "") : "";
+      const semester = (l && s)
+        ? await nameOf(["institutions", i, "programs", p, "levels", l, "semesters", s], "semesterName", "") : "";
+      return { institution: inst, program, level, semester };
+    },
+    async getFees(uid) {
+      const snap = await fs.getDocs(fs.collection(db, "students", uid, "fee_records"));
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    },
+    async getResults(uid) {
+      const snap = await fs.getDocs(fs.collection(db, "students", uid, "results"));
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((r) => r.published !== false);
+    },
+    async getAttendance(st, uid) {
+      const q = fs.query(
+        fs.collection(db, "attendance"),
+        fs.where("institutionId", "==", st.institutionId || ""),
+        fs.where("programId", "==", st.programId || ""),
+        fs.where("levelId", "==", st.levelId || ""),
+        fs.where("semesterId", "==", st.semesterId || "")
+      );
+      const snap = await fs.getDocs(q);
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.records && a.records[uid]);
+    },
+  };
+}
+
+function makeDemo() {
+  let cb = null;
+  const st = { id: "demo", fullName: "Jane Wanjiru (demo)", email: "jane@example.com",
+    admission: "ADM-0142", institutionId: "i", programId: "p", levelId: "l", semesterId: "s" };
+  const now = Date.now();
+  return {
+    onUser: (f) => { cb = f; setTimeout(() => f(null), 0); return () => {}; },
+    signIn: async () => { setTimeout(() => cb && cb({ uid: "demo", email: st.email }), 50); },
+    signOut: async () => { cb && cb(null); },
+    resetPassword: async () => {},
+    getStudent: async () => st,
+    getInfo: async () => ({ institution: "Mwangaza Secondary School", program: "Secondary", level: "Form 3", semester: "Term 3" }),
+    getFees: async () => [
+      { id: "1", description: "Term 1 fees", amountDue: 25000, amountPaid: 25000, dueDate: "2026-01-20", createdAt: now - 9e9 },
+      { id: "2", description: "Term 2 fees", amountDue: 25000, amountPaid: 12000, dueDate: "2026-05-05", createdAt: now - 6e9 },
+      { id: "3", description: "Term 3 fees", amountDue: 25000, amountPaid: 0, dueDate: "2026-09-01", createdAt: now - 3e9 },
+      { id: "4", description: "Trip to Nairobi", amountDue: 3500, amountPaid: 0, dueDate: "2027-02-01", createdAt: now - 1e9 },
+    ],
+    getResults: async () => [
+      { id: "a", unitName: "Mathematics", unitCode: "MAT", marks: 78, totalMarks: 100, grade: "A-", feedback: "Very good work. Keep it up.", publishedAt: now - 2 * 864e5 },
+      { id: "b", unitName: "English", marks: 64, totalMarks: 100, grade: "B", publishedAt: now - 30 * 864e5 },
+      { id: "c", unitName: "Kiswahili", marks: 71, totalMarks: 100, grade: "B+", feedback: "Soma zaidi.", publishedAt: now - 30 * 864e5 },
+    ],
+    getAttendance: async () => {
+      const rows = [], statuses = ["present", "present", "late", "present", "absent", "present", "excused", "present"];
+      statuses.forEach((s, i) => rows.push({ id: "m" + i, unitId: "u1", unitName: "Mathematics", unitCode: "MAT",
+        date: "2026-11-" + String(20 - i * 2).padStart(2, "0"), records: { demo: s }, notes: i === 4 ? { demo: "Sick" } : {} }));
+      ["present", "present", "absent"].forEach((s, i) => rows.push({ id: "e" + i, unitId: "u2", unitName: "English",
+        date: "2026-10-" + String(25 - i * 3).padStart(2, "0"), records: { demo: s }, notes: {} }));
+      return rows;
+    },
+  };
+}
+
+/* ---------- state ---------- */
+let api, user = null, student = null, info = {}, tab = "fees";
+const cache = {};
+let attMonth = "all";
+
+/* ---------- screens ---------- */
+function showLogin(message, good) {
+  root.innerHTML = `
+  ${DEMO ? '<div class="demo">DEMO MODE: sample data only</div>' : ""}
+  <main class="login"><form class="login-card" id="loginForm" novalidate>
+    <h1>ShuleHub</h1>
+    <p class="tag">Your School, Your Learning, Your Future</p>
+    <h3>Student login</h3>
+    <label for="em">Email</label>
+    <input id="em" type="email" autocomplete="username" inputmode="email" required>
+    <label for="pw">Password</label>
+    <div class="field">
+      <input id="pw" type="password" autocomplete="current-password" required>
+      <button type="button" class="eye" id="eye" aria-label="Show or hide password">SHOW</button>
+    </div>
+    ${message ? `<p class="msg ${good ? "good" : ""}" role="alert">${esc(message)}</p>` : ""}
+    <button class="btn" id="go" type="submit">LOG IN</button>
+    <button class="linkbtn" type="button" id="forgot">Forgot password?</button>
+    <p class="hint">Parents, teachers and administrators: please use the ShuleHub app for now. Their web pages are coming soon.</p>
+    <p class="hint"><a href="../privacy.html">Privacy policy</a> &middot; <a href="../index.html">About ShuleHub</a></p>
+  </form></main>`;
+  const em = document.getElementById("em"), pw = document.getElementById("pw");
+  document.getElementById("eye").onclick = (e) => {
+    const hidden = pw.type === "password";
+    pw.type = hidden ? "text" : "password";
+    e.currentTarget.textContent = hidden ? "HIDE" : "SHOW";
+  };
+  document.getElementById("forgot").onclick = async () => {
+    const email = em.value.trim();
+    if (!email) return showLogin("Type your email above first, then tap Forgot password.");
+    try { await api.resetPassword(email); } catch (e) { /* do not reveal whether the email exists */ }
+    showLogin("If that email has a ShuleHub account, a reset link has been sent. Check your inbox and spam folder.", true);
+  };
+  document.getElementById("loginForm").onsubmit = async (ev) => {
+    ev.preventDefault();
+    const email = em.value.trim(), pass = pw.value;
+    if (!email || !pass) return showLogin("Please enter your email and password.");
+    const go = document.getElementById("go");
+    go.disabled = true; go.textContent = "Logging in…";
+    try { await api.signIn(email, pass); }
+    catch (e) { showLogin(friendlyAuthError(e)); }
+  };
+}
+
+async function enter(u) {
+  user = u;
+  root.innerHTML = '<p class="boot">Loading your account…</p>';
+  try {
+    student = await api.getStudent(u.uid);
+  } catch (e) {
+    await api.signOut();
+    return showLogin("We could not open your account. Please check your internet and try again.");
+  }
+  if (!student) {
+    await api.signOut();
+    return showLogin("This website is for student accounts. Parents, teachers and administrators: please use the ShuleHub app for now.");
+  }
+  try { info = await api.getInfo(student); } catch (e) { info = {}; }
+  Object.keys(cache).forEach((k) => delete cache[k]);
+  tab = "fees"; attMonth = "all";
+  renderShell();
+}
+
+function renderShell() {
+  const klass = [info.program, info.level, info.semester].filter(Boolean).join(" • ");
+  root.innerHTML = `
+  ${DEMO ? '<div class="demo">DEMO MODE: sample data only</div>' : ""}
+  <header class="top"><div class="wrap">
+    <div><b>ShuleHub</b><div class="who">${esc(student.email || user.email || "")}</div></div>
+    <button id="out">LOG OUT</button>
+  </div></header>
+  <main class="wrap">
+    <section class="hero">
+      <h1>${esc(student.fullName || "Student")}</h1>
+      <p>${esc(info.institution || "")}${klass ? "<br>" + esc(klass) : ""}${student.admission ? "<br>Adm: " + esc(student.admission) : ""}</p>
+    </section>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      ${[["fees", "FEES"], ["results", "RESULTS"], ["attendance", "ATTENDANCE"]].map(([k, t]) =>
+        `<button class="tab" role="tab" data-tab="${k}" aria-selected="${k === tab}">${t}</button>`).join("")}
+    </nav>
+    <div id="view"></div>
+    <footer class="foot">ShuleHub Web is read-only for now. To pay fees, use the ShuleHub app. &middot;
+      <a href="../privacy.html">Privacy policy</a></footer>
+  </main>`;
+  document.getElementById("out").onclick = () => api.signOut();
+  root.querySelectorAll(".tab").forEach((b) => (b.onclick = () => { tab = b.dataset.tab; renderShell(); }));
+  renderView();
+}
+
+async function renderView() {
+  const view = document.getElementById("view");
+  view.innerHTML = '<p class="muted" style="margin-top:18px">Loading…</p>';
+  const mine = tab;
+  try {
+    let html;
+    if (tab === "fees") {
+      cache.fees ??= await api.getFees(user.uid);
+      html = feesHtml(cache.fees);
+    } else if (tab === "results") {
+      cache.results ??= await api.getResults(user.uid);
+      html = resultsHtml(cache.results);
+    } else {
+      cache.att ??= await api.getAttendance(student, user.uid);
+      html = attendanceHtml(cache.att);
+    }
+    if (mine !== tab) return;
+    view.innerHTML = html;
+    view.querySelectorAll("[data-month]").forEach((b) => (b.onclick = () => { attMonth = b.dataset.month; renderView(); }));
+  } catch (e) {
+    if (mine !== tab) return;
+    const denied = e && (e.code === "permission-denied");
+    view.innerHTML = `<p class="msg" role="alert">${denied
+      ? "You are not allowed to see this yet. Please try the ShuleHub app, or contact your school."
+      : "Could not load this page. Please check your internet and try again."}</p>`;
+  }
+}
+
+/* ---------- fees ---------- */
+function feesHtml(list) {
+  if (!list.length) return '<div class="empty">No fees have been recorded for you yet.</div>';
+  const rows = list.map((f) => ({ ...f, due: num(f.amountDue ?? f.amount), paid: num(f.amountPaid) }))
+    .sort((a, b) => String(a.dueDate || "").localeCompare(String(b.dueDate || "")) || ms(a.createdAt) - ms(b.createdAt));
+  const billed = rows.reduce((s, r) => s + r.due, 0);
+  const paid = rows.reduce((s, r) => s + r.paid, 0);
+  const bal = billed - paid;
+  const today = todayStr();
+  const chip = (r) => {
+    if (r.paid >= r.due && r.due > 0) return ["PAID", "ok"];
+    if (r.dueDate && r.dueDate < today) return ["OVERDUE", "bad"];
+    if (r.paid > 0) return ["PART PAID", "warn"];
+    return ["UNPAID", "info"];
+  };
+  return `
+  <div class="grid3">
+    <div class="sum"><div class="k">TOTAL BILLED</div><div class="v">${ksh(billed)}</div></div>
+    <div class="sum paid"><div class="k">TOTAL PAID</div><div class="v">${ksh(paid)}</div></div>
+    <div class="sum ${bal < 0 ? "credit" : "bal"}"><div class="k">${bal < 0 ? "CREDIT (PAID IN ADVANCE)" : "BALANCE"}</div><div class="v">${ksh(Math.abs(bal))}</div></div>
+  </div>
+  <h2>Fee statement</h2>
+  ${rows.map((r) => { const [t, c] = chip(r); return `
+    <div class="card"><div class="row"><div><h3>${esc(r.description || "Fee")}</h3>
+      <div class="muted small">Charged ${ksh(r.due)} &middot; Paid ${ksh(r.paid)}${r.dueDate ? " &middot; Due " + esc(r.dueDate) : ""}</div></div>
+      <span class="chip ${c}">${t}</span></div></div>`; }).join("")}
+  <p class="note">To pay, send the money by M-Pesa as your school instructs, then report the M-Pesa code in the ShuleHub app. Your school confirms it, and it shows here.</p>`;
+}
+
+/* ---------- results ---------- */
+function resultsHtml(list) {
+  if (!list.length) return '<div class="empty">No results have been published to your account yet. Please check again later.</div>';
+  const week = 7 * 864e5, nowMs = Date.now();
+  const rows = [...list].sort((a, b) => (ms(b.publishedAt) || ms(b.createdAt)) - (ms(a.publishedAt) || ms(a.createdAt)));
+  return `<h2>My results and grades</h2>` + rows.map((r) => {
+    const name = r.unitName || r.subjectName || r.title || "Subject";
+    const code = r.unitCode || r.subjectCode || "";
+    const when = ms(r.publishedAt) || ms(r.createdAt);
+    const isNew = when > 0 && nowMs - when < week;
+    return `<div class="card"><div class="row"><div><h3>${esc(name)}${code ? " (" + esc(code) + ")" : ""}</h3>
+      <div>Marks: ${esc(r.marks ?? "Not released")}${r.totalMarks != null ? " / " + esc(r.totalMarks) : ""} &middot; Grade: <b>${esc(r.grade ?? "Not released")}</b></div>
+      ${r.feedback ? `<div class="muted small">Teacher feedback: ${esc(r.feedback)}</div>` : ""}</div>
+      ${isNew ? '<span class="chip ok">NEW</span>' : ""}</div></div>`;
+  }).join("");
+}
+
+/* ---------- attendance ---------- */
+const statusLabel = (s) => ({ present: "Present", absent: "Absent", late: "Late", excused: "Excused" }[s] ||
+  (s ? s.charAt(0).toUpperCase() + s.slice(1) : "Absent"));
+
+function summary(statuses) {
+  const n = statuses.length;
+  const c = (k) => statuses.filter((s) => s === k).length;
+  const present = c("present");
+  const pct = n ? Math.round((present * 100) / n) : 0;
+  const extra = [c("late") && `Late ${c("late")}`, c("absent") && `Absent ${c("absent")}`, c("excused") && `Excused ${c("excused")}`]
+    .filter(Boolean).join(" · ");
+  return `Present ${present} of ${n} sessions (${pct}%)${extra ? " · " + extra : ""}`;
+}
+
+function attendanceHtml(all) {
+  const uid = user.uid;
+  if (!all.length) return '<div class="empty">No attendance has been recorded for you yet.</div>';
+  const sessions = [...all].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  const months = [...new Set(sessions.map((s) => monthKey(s.date)).filter(Boolean))].sort().reverse();
+  if (attMonth !== "all" && !months.includes(attMonth)) attMonth = "all";
+  const shown = attMonth === "all" ? sessions : sessions.filter((s) => monthKey(s.date) === attMonth);
+  const byUnit = new Map();
+  shown.forEach((s) => { const k = s.unitId || s.unitName || "x"; byUnit.set(k, [...(byUnit.get(k) || []), s]); });
+
+  const chips = [["all", "ALL"], ...months.map((m) => [m, monthLabel(m).toUpperCase()])]
+    .map(([k, t]) => `<button class="tab" data-month="${esc(k)}" aria-selected="${k === attMonth}">${esc(t)}</button>`).join("");
+
+  let html = `<div class="months">${chips}</div>
+    <h2>${attMonth === "all" ? "All months" : esc(monthLabel(attMonth))}</h2>
+    <div class="card"><b>Overall:</b> ${esc(summary(shown.map((s) => s.records[uid])))}</div>`;
+
+  if (attMonth === "all" && months.length) {
+    html += `<h2>By month</h2>` + months.map((m) => `<div class="card"><b>${esc(monthLabel(m))}:</b> ${esc(summary(
+      sessions.filter((s) => monthKey(s.date) === m).map((s) => s.records[uid])))}</div>`).join("");
+  }
+  html += `<h2>By subject</h2>`;
+  byUnit.forEach((list) => {
+    const f = list[0];
+    html += `<div class="card"><h3>${esc(f.unitName || "Subject")}${f.unitCode ? " (" + esc(f.unitCode) + ")" : ""}</h3>
+      <div class="muted small">${esc(summary(list.map((s) => s.records[uid])))}</div>
+      ${list.slice(0, 5).map((s) => { const note = s.notes && s.notes[uid];
+        return `<div class="small">${esc(s.date)}: ${esc(statusLabel(s.records[uid]))}${note ? " - " + esc(note) : ""}</div>`; }).join("")}</div>`;
+  });
+  return html;
+}
+
+/* ---------- start ---------- */
+(async function start() {
+  try {
+    api = DEMO ? makeDemo() : await makeFirebase();
+  } catch (e) {
+    root.innerHTML = '<p class="boot">Could not start. Please check your internet connection and reload the page.</p>';
+    return;
+  }
+  api.onUser((u) => { if (u) enter(u); else { user = null; student = null; showLogin(); } });
+})();
