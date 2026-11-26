@@ -1,4 +1,4 @@
-/* ShuleHub Web - student and parent portal (version 6, school-type wording and Kiswahili)
+/* ShuleHub Web - student and parent portal (version 7, school-type wording, Kiswahili and pay ahead)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
