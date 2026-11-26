@@ -1,4 +1,4 @@
-/* ShuleHub Web - student and parent portal (version 4, with REPORT CARD tab)
+/* ShuleHub Web - student and parent portal (version 5, school-type wording)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
@@ -12,6 +12,98 @@ const firebaseConfig = {
 
 const DEMO = new URLSearchParams(location.search).has("demo");
 const root = document.getElementById("app");
+
+/* ---------- wording for each kind of institution (same as the Android app) ----------
+   A university says Lecturer / Unit / Semester / Year / Course; a primary school says
+   Pupil / Grade / Head teacher; and so on. Words the owner typed for the institution win. */
+const TYPE_WORDS = {
+  university: { teacher: "Lecturer", unit: "Unit", semester: "Semester", level: "Year", program: "Course", student: "Student", school: "university", head: "Dean", admission: "registration number", admissionShort: "reg no" },
+  college:    { teacher: "Trainer",  unit: "Unit", semester: "Term", level: "Level", program: "Course", student: "Student", school: "college", head: "Principal", admission: "admission number", admissionShort: "admission no" },
+  secondary:  { teacher: "Teacher",  unit: "Subject", semester: "Term", level: "Form", program: "Section", student: "Student", school: "school", head: "Principal", admission: "admission number", admissionShort: "admission no" },
+  primary:    { teacher: "Teacher",  unit: "Subject", semester: "Term", level: "Grade", program: "Section", student: "Pupil", school: "school", head: "Head teacher", admission: "admission number", admissionShort: "admission no" },
+  other:      { teacher: "Teacher",  unit: "Subject", semester: "Term", level: "Level", program: "Program", student: "Student", school: "institution", head: "Principal", admission: "admission number", admissionShort: "admission no" },
+};
+const pluralOf = (w) => /[^aeiou]y$/i.test(w) ? w.slice(0, -1) + "ies" : /(s|x|ch|sh)$/i.test(w) ? w + "es" : w + "s";
+let termRules = null;
+
+function setTerms(inst) {
+  termRules = null;
+  if (!inst) return;
+  const d = TYPE_WORDS[inst.type] || TYPE_WORDS.other;
+  const w = (field, def) => (typeof inst[field] === "string" && inst[field].trim()) ? inst[field].trim() : def;
+  const teacher = w("wordTeacher", d.teacher), unit = w("wordUnit", d.unit), semester = w("wordSemester", d.semester);
+  const level = w("wordLevel", d.level), program = w("wordProgram", d.program), student = w("wordStudent", d.student);
+  const school = w("wordInstitution", d.school);
+  const plural = (field, word) => (typeof inst[field] === "string" && inst[field].trim()) ? pluralOf(word) : (word === d.head ? pluralOf(word) : pluralOf(word));
+  const map = {};
+  const put = (a, b, toA, toB) => {
+    if (a.toLowerCase() !== toA.toLowerCase()) map[a] = toA;
+    if (b.toLowerCase() !== toB.toLowerCase()) map[b] = toB;
+  };
+  put("teacher", "teachers", teacher, pluralOf(teacher));
+  put("subject", "subjects", unit, pluralOf(unit));
+  put("term", "terms", semester, pluralOf(semester));
+  put("level", "levels", level, pluralOf(level));
+  put("program", "programs", program, pluralOf(program));
+  put("programme", "programmes", program, pluralOf(program));
+  put("student", "students", student, pluralOf(student));
+  put("school", "schools", school, pluralOf(school));
+  put("institution", "institutions", school, pluralOf(school));
+  put("principal", "principals", d.head, pluralOf(d.head));
+  put("admission number", "admission numbers", d.admission, pluralOf(d.admission));
+  put("admission no", "admission no", d.admissionShort, d.admissionShort);
+  const keys = Object.keys(map);
+  if (!keys.length) return;
+  keys.sort((a, b) => b.length - a.length);
+  const protectedPhrases = "(?:secondary|primary|junior|senior|high|nursery|boarding|special)\\s+schools?\\b|terms?\\s+(?:and|of)\\b|(?:long|short)[- ]term|subject\\s+to|(?:access|permission|grade|battery|log)\\s+level|term\\s+and\\s+condition";
+  const esc2 = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  termRules = {
+    map,
+    re: new RegExp("(" + protectedPhrases + ")|\\b(" + keys.map(esc2).join("|") + ")\\b", "gi"),
+  };
+}
+
+function shapeWord(src, target) {
+  if (src.length > 1 && src === src.toUpperCase()) return target.toUpperCase();
+  if (src[0] === src[0].toUpperCase()) return target[0].toUpperCase() + target.slice(1);
+  return target.toLowerCase();
+}
+
+function applyTermsTo(s) {
+  if (!termRules || s.length < 3) return s;
+  let out = s.replace(termRules.re, (m, prot, word) => prot ? m : shapeWord(word, termRules.map[word.toLowerCase()] || word));
+  if (out !== s) {
+    out = out.replace(/\b([Aa]n?)(\s+)(\w+)/g, (m, a, sp, w) => {
+      const targets = Object.values(termRules.map).map((t) => t.toLowerCase());
+      if (!targets.some((t) => t.startsWith(w.toLowerCase()) && t.split(" ")[0] === w.toLowerCase())) return m;
+      const lw = w.toLowerCase();
+      const vowel = "aeio".includes(lw[0]) || (lw[0] === "u" && !lw.startsWith("uni"));
+      const art = vowel ? "an" : "a";
+      return (a[0] === "A" ? art[0].toUpperCase() + art.slice(1) : art) + sp + w;
+    });
+    out = out.replace(/\b1 (students|pupils|units|subjects|lecturers|teachers|trainers|courses|semesters|terms|payments|results|sessions|lessons)\b/gi, (m, w) => "1 " + w.slice(0, -1));
+  }
+  return out;
+}
+
+let termBusy = false;
+function rewriteTerms() {
+  if (!termRules || termBusy) return;
+  termBusy = true;
+  try {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const n of nodes) {
+      const p = n.parentNode && n.parentNode.nodeName;
+      if (p === "SCRIPT" || p === "STYLE") continue;
+      const before = n.nodeValue;
+      const after = applyTermsTo(before);
+      if (after !== before) n.nodeValue = after;
+    }
+  } finally { termBusy = false; }
+}
+new MutationObserver(() => rewriteTerms()).observe(root, { childList: true, subtree: true, characterData: true });
 
 /* ---------- small helpers ---------- */
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
@@ -82,6 +174,12 @@ async function makeFirebase() {
       return docs(await fs.getDocs(q));
     },
     institutionName: (id) => nameOf(["institutions", id], "name", ""),
+    async institutionTerms(id) {
+      try {
+        const s = await fs.getDoc(fs.doc(db, "institutions", id));
+        return s.exists() ? s.data() : null;
+      } catch (e) { return null; }
+    },
     async getClassNames(st) {
       const { institutionId: i, programId: p, levelId: l, semesterId: s } = st;
       if (!i || !p) return {};
@@ -203,6 +301,7 @@ function makeDemo() {
       { id: "dp_c2", studentUid: "c2", studentName: "Faith Otieno (demo)", admissionNumber: "ADM-0310" },
     ],
     institutionName: async () => "Mwangaza Secondary School",
+    institutionTerms: async () => ({ type: new URLSearchParams(location.search).get("type") || "secondary" }),
     getClassNames: async () => ({}),
     getFees: async (sid) => [
       { id: "1", description: "Term 1 fees", amountDue: 25000, amountPaid: 25000, dueDate: "2026-01-20", createdAt: now - 9e9 },
@@ -268,6 +367,7 @@ let cache = {};
 
 /* ---------- login screen ---------- */
 function showLogin(message, good) {
+  setTerms(null);
   root.innerHTML = `
   ${DEMO ? '<div class="demo">DEMO MODE: sample data only. Use an email containing "parent" for the parent view.</div>' : ""}
   <main class="login"><form class="login-card" id="loginForm" novalidate>
@@ -350,6 +450,7 @@ async function openSubject(st) {
   let inst = "";
   try { inst = st.institutionId ? await api.institutionName(st.institutionId) : ""; } catch (e) { /* ignore */ }
   info = { institution: inst, ...names };
+  try { setTerms(st.institutionId ? await api.institutionTerms(st.institutionId) : null); } catch (e) { setTerms(null); }
 }
 
 async function openChild(link) {
