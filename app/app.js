@@ -201,7 +201,7 @@ function swAttributes() {
 
 (function langSwitch() {
   const bar = document.createElement("div");
-  bar.style.cssText = "position:fixed;right:10px;bottom:10px;z-index:50;display:flex;gap:4px;background:rgba(255,255,255,.95);border:1px solid #bbb;border-radius:20px;padding:3px;font:600 12px system-ui";
+  bar.style.cssText = "position:fixed;right:8px;top:8px;z-index:2147483647;display:flex;gap:4px;background:rgba(255,255,255,.95);border:1px solid #bbb;border-radius:20px;padding:3px;font:600 12px system-ui";
   [["en", "EN"], ["sw", "SW"]].forEach(([code, label]) => {
     const b = document.createElement("button");
     b.type = "button"; b.textContent = label; b.setAttribute("aria-label", code === "sw" ? "Kiswahili" : "English");
