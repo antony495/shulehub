@@ -116,6 +116,12 @@ const SW_PHRASES = [
   ["Could not load this page. Please check your internet and try again.", "Imeshindikana kupakia ukurasa huu. Tafadhali angalia intaneti na ujaribu tena."],
   ["Could not start. Please check your internet connection and reload the page.", "Imeshindikana kuanza. Tafadhali angalia intaneti kisha pakia ukurasa upya."],
   ["Loading your account…", "Inapakia akaunti yako…"], ["Loading…", "Inapakia…"], ["Sending…", "Inatuma…"],
+  ["Pay ahead (advance for future fees)", "Lipa mapema (kwa ada zijazo)"],
+  ["Advance payment (pay ahead)", "Malipo ya mapema"],
+  ["You can also pay ahead. Choose \"Pay ahead\" and any amount: it is kept as credit and covers your future fees.", "Unaweza pia kulipa mapema. Chagua \"Lipa mapema\" na kiasi chochote: kinabaki kama salio la ziada na kitalipia ada zako zijazo."],
+  ["No fees have been recorded yet, so there is nothing to pay.", "Hakuna ada iliyorekodiwa bado, kwa hiyo hakuna cha kulipa."],
+  ["CREDIT (PAID IN ADVANCE)", "SALIO LA ZIADA (LIMELIPWA MAPEMA)"],
+  ["PART PAID", "IMELIPWA SEHEMU"],
   ["No child is linked to your account yet. Use the ShuleHub app to add a child.", "Hakuna mtoto aliyeunganishwa na akaunti yako bado. Tumia programu ya ShuleHub kuongeza mtoto."],
   ["No fees have been recorded yet.", "Hakuna ada iliyorekodiwa bado."],
   ["No results have been published yet. Please check again later.", "Hakuna matokeo yaliyochapishwa bado. Tafadhali angalia tena baadaye."],
@@ -897,22 +903,28 @@ function payHtml(fees, instr, pays) {
 
   const how = `<h2>How to pay</h2><div class="card instr">${esc(instr || "Send the money by M-Pesa as your school instructs, then type the M-Pesa code below.")}</div>`;
 
-  const form = open.length ? `
+  // "pay ahead": the money is reported against the newest fee and kept as credit for the fees that come later
+  const newest = [...fees].map((f) => ({ ...f, due: num(f.amountDue ?? f.amount) }))
+    .sort((a, b) => String(b.dueDate || "").localeCompare(String(a.dueDate || "")) || ms(b.createdAt) - ms(a.createdAt))[0];
+  const options = open.map((r) => `<option value="${esc(r.id)}" data-bal="${r.bal}" data-desc="${esc(r.description || "Fee")}">${esc(r.description || "Fee")} (balance ${esc(ksh(r.bal))})</option>`);
+  if (newest) options.push(`<option value="${esc(newest.id)}" data-bal="0" data-adv="1" data-desc="Advance payment (pay ahead)">Pay ahead (advance for future fees)</option>`);
+  const form = newest ? `
     <h2>Report your payment</h2>
     <form class="card" id="payForm" data-total="${total}" novalidate>
       <label for="payFee">Which fee are you paying?</label>
-      <select id="payFee">${open.map((r) => `<option value="${esc(r.id)}" data-bal="${r.bal}" data-desc="${esc(r.description || "Fee")}">${esc(r.description || "Fee")} (balance ${esc(ksh(r.bal))})</option>`).join("")}</select>
+      <select id="payFee">${options.join("")}</select>
       <label for="payAmt">Amount you sent (KSh)</label>
-      <input id="payAmt" type="number" inputmode="decimal" min="1" max="1000000" step="any" value="${open[0].bal}">
-      <div class="qbtns"><button type="button" class="tab" id="qThis">THIS FEE</button><button type="button" class="tab" id="qAll">ALL FEES (${esc(ksh(total))})</button></div>
+      <input id="payAmt" type="number" inputmode="decimal" min="1" max="1000000" step="any" value="${open.length ? open[0].bal : ""}">
+      ${open.length ? `<div class="qbtns"><button type="button" class="tab" id="qThis">THIS FEE</button><button type="button" class="tab" id="qAll">ALL FEES (${esc(ksh(total))})</button></div>` : ""}
       <p class="muted small">You can pay more than one fee at once. The extra goes to your next unpaid fees when the school confirms.</p>
+      <p class="muted small">You can also pay ahead. Choose "Pay ahead" and any amount: it is kept as credit and covers your future fees.</p>
       <label for="payCode">M-Pesa code</label>
       <input id="payCode" type="text" maxlength="10" autocomplete="off" autocapitalize="characters" placeholder="e.g. QGH7K2LM9P">
       <label for="payPhone">Phone number you paid from</label>
       <input id="payPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="e.g. 0712345678">
       <p class="msg" id="payMsg" role="alert" hidden></p>
       <button class="btn" id="payGo" type="submit">SEND PAYMENT REPORT</button>
-    </form>` : '<div class="empty">There are no unpaid fees to pay right now.</div>';
+    </form>` : '<div class="empty">No fees have been recorded yet, so there is nothing to pay.</div>';
 
   let hist;
   if (pays === null) hist = '<p class="muted small">Your earlier payment reports could not be loaded.</p>';
@@ -940,8 +952,9 @@ function wirePay(view) {
   const say = (t) => { msg.textContent = t; msg.hidden = false; };
 
   feeSel.onchange = () => { amt.value = balOf() || ""; };
-  form.querySelector("#qThis").onclick = () => { amt.value = balOf() || ""; };
-  form.querySelector("#qAll").onclick = () => { amt.value = Number(form.dataset.total) || ""; };
+  const qThis = form.querySelector("#qThis"), qAll = form.querySelector("#qAll");
+  if (qThis) qThis.onclick = () => { amt.value = balOf() || ""; };
+  if (qAll) qAll.onclick = () => { amt.value = Number(form.dataset.total) || ""; };
   code.oninput = () => { code.value = code.value.toUpperCase().replace(/[^A-Z0-9]/g, ""); };
 
   form.onsubmit = async (ev) => {
