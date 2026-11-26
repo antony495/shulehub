@@ -1,4 +1,4 @@
-/* ShuleHub Web - student and parent portal (version 5, school-type wording)
+/* ShuleHub Web - student and parent portal (version 6, school-type wording and Kiswahili)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
@@ -86,9 +86,135 @@ function applyTermsTo(s) {
   return out;
 }
 
+
+/* ---------- Kiswahili ---------- */
+let LANG = "en";
+try { LANG = localStorage.getItem("shulehub_lang") === "sw" ? "sw" : "en"; } catch (e) {}
+document.documentElement.lang = LANG;
+
+// longest and most specific first; plain strings match whole words, ignoring case
+const SW_PHRASES = [
+  [/Present (\d+) of (\d+) sessions/g, "Amehudhuria $1 kati ya $2 vipindi"],
+  [/\b(?:Term|Semester) (\d+) fees\b/gi, "Ada ya Muhula $1"],
+  [/\bTerm (\d+)\b/gi, "Muhula $1"], [/\bSemester (\d+)\b/gi, "Muhula $1"],
+  [/\bForm (\d+)\b/gi, "Kidato $1"], [/\bGrade (\d+)\b/gi, "Darasa la $1"], [/\bYear (\d+)\b/gi, "Mwaka wa $1"],
+  [/(\d+) out of (\d+)/g, "$1 kati ya $2"],
+  ["Teachers and administrators: please use the ShuleHub app for now. Their web pages are coming soon.", "Walimu na wasimamizi: tafadhali tumia programu ya ShuleHub kwa sasa. Kurasa zao za wavuti zinakuja hivi karibuni."],
+  ["This website is for students and parents. Teachers and administrators: please use the ShuleHub app for now.", "Tovuti hii ni ya wanafunzi na wazazi. Walimu na wasimamizi: tafadhali tumia programu ya ShuleHub kwa sasa."],
+  ["Your School, Your Learning, Your Future", "Shule Yako, Masomo Yako, Kesho Yako"],
+  ["Student or parent login", "Kuingia kwa mwanafunzi au mzazi"],
+  ["Type your email above first, then tap Forgot password.", "Andika barua pepe yako juu kwanza, kisha bonyeza Umesahau nenosiri."],
+  ["If that email has a ShuleHub account, a reset link has been sent. Check your inbox and spam folder.", "Ikiwa barua pepe hiyo ina akaunti ya ShuleHub, kiungo cha kubadilisha nenosiri kimetumwa. Angalia kikasha chako na folda ya spam."],
+  ["Please enter your email and password.", "Tafadhali weka barua pepe na nenosiri lako."],
+  ["We could not open your account. Please check your internet and try again.", "Hatukuweza kufungua akaunti yako. Tafadhali angalia intaneti na ujaribu tena."],
+  ["Wrong email or password. Please try again.", "Barua pepe au nenosiri si sahihi. Tafadhali jaribu tena."],
+  ["Too many attempts. Please wait a few minutes and try again.", "Majaribio mengi mno. Tafadhali subiri dakika chache kisha ujaribu tena."],
+  ["No internet connection. Please check it and try again.", "Hakuna mtandao. Tafadhali angalia kisha ujaribu tena."],
+  ["Could not log in. Please try again.", "Imeshindikana kuingia. Tafadhali jaribu tena."],
+  ["Could not open this child. Please try again.", "Imeshindikana kufungua mtoto huyu. Tafadhali jaribu tena."],
+  ["You are not allowed to see this yet. Please try the ShuleHub app, or contact your school.", "Huruhusiwi kuona hii bado. Tafadhali jaribu programu ya ShuleHub, au wasiliana na shule yako."],
+  ["Could not load this page. Please check your internet and try again.", "Imeshindikana kupakia ukurasa huu. Tafadhali angalia intaneti na ujaribu tena."],
+  ["Could not start. Please check your internet connection and reload the page.", "Imeshindikana kuanza. Tafadhali angalia intaneti kisha pakia ukurasa upya."],
+  ["Loading your account…", "Inapakia akaunti yako…"], ["Loading…", "Inapakia…"], ["Sending…", "Inatuma…"],
+  ["No child is linked to your account yet. Use the ShuleHub app to add a child.", "Hakuna mtoto aliyeunganishwa na akaunti yako bado. Tumia programu ya ShuleHub kuongeza mtoto."],
+  ["No fees have been recorded yet.", "Hakuna ada iliyorekodiwa bado."],
+  ["No results have been published yet. Please check again later.", "Hakuna matokeo yaliyochapishwa bado. Tafadhali angalia tena baadaye."],
+  ["No results have been published yet, so there is no report card.", "Hakuna matokeo yaliyochapishwa bado, kwa hiyo hakuna ripoti."],
+  ["No attendance has been recorded yet.", "Hakuna mahudhurio yaliyorekodiwa bado."],
+  ["No timetable has been set up for this class yet.", "Hakuna ratiba iliyowekwa kwa darasa hili bado."],
+  ["There are no unpaid fees to pay right now.", "Hakuna ada ambazo hazijalipwa kwa sasa."],
+  ["You have not reported any payment yet.", "Hujaripoti malipo yoyote bado."],
+  ["To pay, open the PAY tab. Send the money by M-Pesa as the school instructs, then report the M-Pesa code there. The school confirms it, and it shows here.", "Kulipa, fungua kichupo cha LIPA. Tuma pesa kwa M-Pesa kama shule inavyoelekeza, kisha andika msimbo wa M-Pesa hapo. Shule italithibitisha, na itaonekana hapa."],
+  ["ShuleHub Web shows your school records. Report payments on the PAY tab.", "ShuleHub Web inaonyesha rekodi za shule yako. Ripoti malipo kwenye kichupo cha LIPA."],
+  ["Account number: the student's admission number", "Nambari ya akaunti: nambari ya usajili ya mwanafunzi"],
+  ["Then type the M-Pesa code below.", "Kisha andika msimbo wa M-Pesa hapa chini."],
+  ["You can pay more than one fee at once. The extra goes to your next unpaid fees when the school confirms.", "Unaweza kulipa ada zaidi ya moja kwa pamoja. Kiasi cha ziada kinaenda kwenye ada zako zinazofuata shule ikithibitisha."],
+  ["Please choose which fee you are paying.", "Tafadhali chagua ada unayolipia."],
+  ["Please enter the amount you sent.", "Tafadhali weka kiasi ulichotuma."],
+  ["The amount is too large. The most you can send in one payment is KSh 1,000,000.", "Kiasi ni kikubwa mno. Kiwango cha juu kwa malipo moja ni KSh 1,000,000."],
+  ["The M-Pesa code must be 10 letters and numbers, for example QGH7K2LM9P.", "Msimbo wa M-Pesa lazima uwe na herufi na tarakimu 10, kwa mfano QGH7K2LM9P."],
+  ["Please enter the phone number you paid from, for example 0712345678.", "Tafadhali weka nambari ya simu uliyolipia, kwa mfano 0712345678."],
+  ["This M-Pesa code has already been submitted, or it was not accepted. Check the code, and check that your device's date and time are correct.", "Msimbo huu wa M-Pesa umeshatumwa, au haukukubaliwa. Angalia msimbo, na uhakikishe tarehe na saa ya kifaa chako ni sahihi."],
+  ["Could not send. Please check your internet and try again.", "Imeshindikana kutuma. Tafadhali angalia intaneti na ujaribu tena."],
+  ["Use an email containing \"parent\" for the parent view.", "Tumia barua pepe yenye \"parent\" kuona ukurasa wa mzazi."],
+  ["DEMO MODE: sample data only", "HALI YA MAJARIBIO: data ya mfano tu"],
+  ["Code not found in school M-Pesa statement", "Msimbo haukupatikana kwenye taarifa ya M-Pesa ya shule"],
+  ["Show or hide password", "Onyesha au ficha nenosiri"],
+  ["Forgot password?", "Umesahau nenosiri?"], ["Privacy policy", "Sera ya faragha"], ["About ShuleHub", "Kuhusu ShuleHub"],
+  ["Fee statement", "Taarifa ya ada"], ["TOTAL BILLED", "JUMLA YA ADA"], ["TOTAL PAID", "JUMLA ILIYOLIPWA"], ["TOTAL BALANCE", "JUMLA YA SALIO"],
+  ["MY CHILDREN", "WATOTO WANGU"], ["My children", "Watoto wangu"],
+  ["How to pay", "Jinsi ya kulipa"], ["Report your payment", "Ripoti malipo yako"], ["Which fee are you paying?", "Unalipa ada gani?"],
+  ["Amount you sent (KSh)", "Kiasi ulichotuma (KSh)"], ["THIS FEE", "ADA HII"], ["ALL FEES", "ADA ZOTE"],
+  ["M-Pesa code", "Msimbo wa M-Pesa"], ["Phone number you paid from", "Nambari ya simu uliyolipia"],
+  ["SEND PAYMENT REPORT", "TUMA RIPOTI YA MALIPO"], ["My payment reports", "Ripoti zangu za malipo"],
+  ["Results and grades", "Matokeo na alama"], ["Teacher feedback:", "Maoni ya mwalimu:"],
+  ["MEAN POINTS · MEAN GRADE", "POINTI WASTANI · DARAJA WASTANI"], ["CLASS POSITION", "NAFASI DARASANI"],
+  ["Teacher's remarks", "Maoni ya walimu"], ["Principal's remark", "Maoni ya mkuu wa shule"],
+  ["Closing date:", "Tarehe ya kufunga:"], ["Next term opens:", "Muhula ujao unafunguliwa:"], ["Grading scale:", "Vipimo vya alama:"],
+  ["PRINT OR SAVE AS PDF", "CHAPISHA AU HIFADHI KAMA PDF"],
+  ["REPORT CARD", "RIPOTI YA MAENDELEO"], ["Admission no", "Nambari ya usajili"], ["Adm:", "Nambari ya usajili:"],
+  ["All months", "Miezi yote"], ["By month", "Kwa mwezi"], ["By subject", "Kwa somo"],
+  ["End of term", "Mwisho wa muhula"], ["End of semester", "Mwisho wa semista"], ["Mid-term", "Katikati ya muhula"],
+  ["Marks:", "Alama:"], ["Grade:", "Daraja:"], ["Overall:", "Kwa ujumla:"],
+  ["LOG IN", "INGIA"], ["LOG OUT", "TOKA"], ["SHOW", "ONYESHA"], ["HIDE", "FICHA"], ["Email", "Barua pepe"], ["Password", "Nenosiri"],
+  ["FEES", "ADA"], ["PAY", "LIPA"], ["RESULTS", "MATOKEO"], ["ATTENDANCE", "MAHUDHURIO"], ["TIMETABLE", "RATIBA"],
+  ["BALANCE", "SALIO"], ["balance", "salio"], ["Charged", "Imetozwa"], ["Paid", "Imelipwa"], ["Due", "Mwisho"],
+  ["OVERDUE", "IMECHELEWA"], ["UNPAID", "HAIJALIPWA"], ["REJECTED", "IMEKATALIWA"], ["CONFIRMED", "IMETHIBITISHWA"], ["PENDING", "INASUBIRI"], ["NEW", "MPYA"],
+  ["Present", "Amehudhuria"], ["Absent", "Hayupo"], ["Late", "Amechelewa"], ["Excused", "Ameruhusiwa"],
+  ["Total", "Jumla"], ["Average", "Wastani"], ["Reason:", "Sababu:"], ["e.g.", "mf."], ["ALL", "YOTE"], ["Room", "Chumba"], ["Lesson", "Somo"], ["Subject", "Somo"],
+  ["January", "Januari"], ["February", "Februari"], ["March", "Machi"], ["April", "Aprili"], ["May", "Mei"], ["June", "Juni"],
+  ["July", "Julai"], ["August", "Agosti"], ["September", "Septemba"], ["October", "Oktoba"], ["November", "Novemba"], ["December", "Desemba"],
+  ["Monday", "Jumatatu"], ["Tuesday", "Jumanne"], ["Wednesday", "Jumatano"], ["Thursday", "Alhamisi"], ["Friday", "Ijumaa"], ["Saturday", "Jumamosi"], ["Sunday", "Jumapili"],
+].map(([a, b]) => [typeof a === "string"
+  ? new RegExp((/^\w/.test(a) ? "\\b" : "") + a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + (/\w$/.test(a) ? "\\b" : ""), "gi") : a, b]);
+
+function swTranslate(s) {
+  if (!s || !/[A-Za-z]/.test(s)) return s;
+  let out = s;
+  for (const [re, to] of SW_PHRASES) {
+    out = out.replace(re, (...m) => {
+      const hit = m[0];
+      const r = to.replace(/\$(\d)/g, (_, i) => m[+i]);
+      if (hit.length > 2 && hit === hit.toUpperCase() && /[A-Z]{3}/.test(hit)) return r.toUpperCase();
+      if (r.length > 2 && r === r.toUpperCase()) {            // the table holds a capitals word: follow the original's case
+        const low = r.toLowerCase();
+        return hit[0] === hit[0].toLowerCase() ? low : low[0].toUpperCase() + low.slice(1);
+      }
+      return r;
+    });
+  }
+  return out;
+}
+
+function swAttributes() {
+  root.querySelectorAll("[placeholder],[aria-label],[title]").forEach((e) => {
+    ["placeholder", "aria-label", "title"].forEach((a) => {
+      const v = e.getAttribute(a);
+      if (!v) return;
+      const key = "data-en-" + a;
+      if (!e.hasAttribute(key)) e.setAttribute(key, v);
+      const t = swTranslate(e.getAttribute(key));
+      if (t !== v) e.setAttribute(a, t);
+    });
+  });
+}
+
+(function langSwitch() {
+  const bar = document.createElement("div");
+  bar.style.cssText = "position:fixed;right:10px;bottom:10px;z-index:50;display:flex;gap:4px;background:rgba(255,255,255,.95);border:1px solid #bbb;border-radius:20px;padding:3px;font:600 12px system-ui";
+  [["en", "EN"], ["sw", "SW"]].forEach(([code, label]) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = label; b.setAttribute("aria-label", code === "sw" ? "Kiswahili" : "English");
+    b.style.cssText = "border:0;border-radius:16px;padding:5px 10px;cursor:pointer;color:#111;background:" + (LANG === code ? "#9fe0c5" : "transparent");
+    b.onclick = () => { try { localStorage.setItem("shulehub_lang", code); } catch (e) {} location.reload(); };
+    bar.appendChild(b);
+  });
+  document.body.appendChild(bar);
+})();
+
 let termBusy = false;
 function rewriteTerms() {
-  if (!termRules || termBusy) return;
+  if ((!termRules && LANG !== "sw") || termBusy) return;
   termBusy = true;
   try {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -98,9 +224,10 @@ function rewriteTerms() {
       const p = n.parentNode && n.parentNode.nodeName;
       if (p === "SCRIPT" || p === "STYLE") continue;
       const before = n.nodeValue;
-      const after = applyTermsTo(before);
+      const after = LANG === "sw" ? swTranslate(before) : applyTermsTo(before);
       if (after !== before) n.nodeValue = after;
     }
+    if (LANG === "sw") swAttributes();
   } finally { termBusy = false; }
 }
 new MutationObserver(() => rewriteTerms()).observe(root, { childList: true, subtree: true, characterData: true });
