@@ -1,4 +1,4 @@
-/* ShuleHub Web - student and parent portal (version 8, own attendance only)
+/* ShuleHub Web - student and parent portal (version 9, language switch in its own row)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
@@ -207,15 +207,18 @@ function swAttributes() {
 
 (function langSwitch() {
   const bar = document.createElement("div");
-  bar.style.cssText = "position:fixed;right:8px;top:8px;z-index:2147483647;display:flex;gap:4px;background:rgba(255,255,255,.95);border:1px solid #bbb;border-radius:20px;padding:3px;font:600 12px system-ui";
+  bar.style.cssText = "display:flex;justify-content:flex-end;padding:8px 16px 0;font:600 12px system-ui";
+  const pill = document.createElement("div");
+  pill.style.cssText = "display:flex;gap:4px;background:#fff;border:1px solid #bbb;border-radius:20px;padding:3px";
+  bar.appendChild(pill);
   [["en", "EN"], ["sw", "SW"]].forEach(([code, label]) => {
     const b = document.createElement("button");
     b.type = "button"; b.textContent = label; b.setAttribute("aria-label", code === "sw" ? "Kiswahili" : "English");
     b.style.cssText = "border:0;border-radius:16px;padding:5px 10px;cursor:pointer;color:#111;background:" + (LANG === code ? "#9fe0c5" : "transparent");
     b.onclick = () => { try { localStorage.setItem("shulehub_lang", code); } catch (e) {} location.reload(); };
-    bar.appendChild(b);
+    pill.appendChild(b);
   });
-  document.body.appendChild(bar);
+  document.body.insertBefore(bar, root);
 })();
 
 let termBusy = false;
