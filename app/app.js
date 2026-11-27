@@ -1,4 +1,4 @@
-/* ShuleHub Web - student and parent portal (version 7, school-type wording, Kiswahili and pay ahead)
+/* ShuleHub Web - student and parent portal (version 8, own attendance only)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
@@ -328,16 +328,9 @@ async function makeFirebase() {
     async getResults(sid) {
       return docs(await fs.getDocs(fs.collection(db, "students", sid, "results"))).filter((r) => r.published !== false);
     },
-    // a student reads the class registers and keeps only the rows that include them
+    // a student reads only their own attendance copy: students/{id}/attendance (never the class registers)
     async getStudentAttendance(st) {
-      const q = fs.query(
-        fs.collection(db, "attendance"),
-        fs.where("institutionId", "==", st.institutionId || ""),
-        fs.where("programId", "==", st.programId || ""),
-        fs.where("levelId", "==", st.levelId || ""),
-        fs.where("semesterId", "==", st.semesterId || "")
-      );
-      return docs(await fs.getDocs(q)).filter((a) => a.records && a.records[st.id]);
+      return this.getChildAttendance(st.id);
     },
     // a parent reads the child's own copy: students/{id}/attendance
     async getChildAttendance(sid) {
