@@ -1,4 +1,4 @@
-/* ShuleHub Web - student and parent portal (version 9, language switch in its own row)
+/* ShuleHub Web - student and parent portal (version 10, payment document id fix)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
@@ -394,8 +394,9 @@ async function makeFirebase() {
       try { out.remarks = docs(await fs.getDocs(fs.collection(db, "students", st.id, "teacherRemarks"))); } catch (e) { /* none */ }
       return out;
     },
-    // the M-Pesa code is the document id, so sending the same code twice is refused by the rules
-    submitPayment: (data) => fs.setDoc(fs.doc(db, "payment_submissions", data.mpesaCode), data),
+    // the document id is schoolId_code, so one school cannot block another school's code,
+    // and sending the same code twice to the same school is refused by the rules
+    submitPayment: (data) => fs.setDoc(fs.doc(db, "payment_submissions", data.institutionId + "_" + data.mpesaCode), data),
   };
 }
 
