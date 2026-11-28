@@ -1,4 +1,4 @@
-/* ShuleHub Web - student and parent portal (version 17, saved marks shown, typing-safe)
+/* ShuleHub Web - student and parent portal (version 18, results carry the subject id)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
@@ -525,7 +525,7 @@ async function makeFirebase() {
         const batch = fs.writeBatch(db);
         entries.slice(i, i + 10).forEach(({ student, marks, band }) => batch.set(
           fs.doc(db, "students", student.uid, "results", resultIdFor(unit.unitName, unit.semesterId, exam)), {
-            unitName: unit.unitName, unitCode: unit.unitCode || "", marks, totalMarks: total,
+            unitId: unit.unitId || unit.id || "", unitName: unit.unitName, unitCode: unit.unitCode || "", marks, totalMarks: total,
             grade: band ? band.grade : "", points: band ? band.points : 0, gradeRemark: band ? band.remark : "",
             published: true, teacherUid, teacherName: teacher.fullName || teacher.email || "Teacher",
             institutionId, programId: unit.programId, levelId: unit.levelId, semesterId: unit.semesterId,
