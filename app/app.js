@@ -1,4 +1,4 @@
-/* ShuleHub Web - student and parent portal (version 14, announcements)
+/* ShuleHub Web - student and parent portal (version 15, student lists)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
@@ -164,6 +164,9 @@ const SW_PHRASES = [
   ["Confirm payments, approve new students and post announcements here. Everything else is in the ShuleHub app.", "Thibitisha malipo, idhinisha wanafunzi wapya na weka matangazo hapa. Mengine yote yako kwenye programu ya ShuleHub."],
   ["ShuleHub Web shows your school records. Report payments on the PAY tab.", "ShuleHub Web inaonyesha rekodi za shule yako. Ripoti malipo kwenye kichupo cha LIPA."], ["DELETE", "FUTA"],
   ["My previous announcements", "Matangazo yangu ya awali"], ["Title", "Kichwa"], ["Message", "Ujumbe"],
+  [/(\d+) of (\d+) students/g, "Wanafunzi $1 kati ya $2"],
+  ["ALL STUDENTS", "WANAFUNZI WOTE"], ["Students by class", "Wanafunzi kwa darasa"], ["Search by name or admission number", "Tafuta kwa jina au nambari ya usajili"],
+  ["No students found.", "Hakuna wanafunzi waliopatikana."], ["No class assigned yet", "Bado hajapangiwa darasa"],
   ["NOTICES", "MATANGAZO"], ["No announcements yet.", "Hakuna matangazo bado."], ["Announcements", "Matangazo"],
   ["Who should see it?", "Nani aone?"], ["All students in my institution", "Wanafunzi wote katika taasisi yangu"],
   ["Please enter a title and a message.", "Tafadhali andika kichwa na ujumbe."], ["POST ANNOUNCEMENT", "WEKA TANGAZO"], ["POSTING…", "INAWEKA…"],
@@ -577,6 +580,9 @@ async function makeFirebase() {
     },
     postNotice: (n) => fs.addDoc(fs.collection(db, "announcements"), n),
     deleteNotice: (id) => fs.deleteDoc(fs.doc(db, "announcements", id)),
+    async getAllStudents(inst) {
+      return docs(await fs.getDocs(fs.query(fs.collection(db, "students"), fs.where("institutionId", "==", inst))));
+    },
     async getPendingStudents(inst) {
       const q = fs.query(fs.collection(db, "studentRegistrationRequests"), fs.where("institutionId", "==", inst), fs.where("status", "==", "pending"));
       return docs(await fs.getDocs(q));
@@ -651,7 +657,7 @@ function makeDemo() {
     ],
     institutionName: async () => "Mwangaza Secondary School",
     institutionTerms: async () => ({ type: new URLSearchParams(location.search).get("type") || "secondary" }),
-    getClassNames: async () => ({}),
+    getClassNames: async (st) => (st && st.programId ? { program: "Secondary", level: st.levelId === "l2" ? "Form 2" : "Form 3", semester: "Term 3" } : {}),
     getFees: async (sid) => [
       { id: "1", description: "Term 1 fees", amountDue: 25000, amountPaid: 25000, dueDate: "2026-01-20", createdAt: now - 9e9 },
       { id: "2", description: "Term 2 fees", amountDue: 25000, amountPaid: sid === "c2" ? 25000 : 12000, dueDate: "2026-05-05", createdAt: now - 6e9 },
@@ -702,6 +708,12 @@ function makeDemo() {
     getMyNotices: async () => demoNotes.filter((n) => n.teacherUid === "me"),
     postNotice: async (n) => { demoNotes.push({ id: "n" + demoNotes.length, ...n, teacherUid: "me" }); window.__posted = n; },
     deleteNotice: async (id) => { const i = demoNotes.findIndex((x) => x.id === id); if (i >= 0) demoNotes.splice(i, 1); },
+    getAllStudents: async () => [
+      { id: "s1", fullName: "Jane Wanjiru", admissionNumber: "ADM-0142", email: "jane@example.com", phone: "0700000001", programId: "p", levelId: "l", semesterId: "s" },
+      { id: "s2", fullName: "Brian Otieno", admissionNumber: "ADM-0231", email: "brian@example.com", phone: "0700000002", programId: "p", levelId: "l", semesterId: "s" },
+      { id: "s3", fullName: "Faith Otieno", admissionNumber: "ADM-0310", email: "faith@example.com", phone: "0700000003", programId: "p", levelId: "l2", semesterId: "s" },
+      { id: "s4", fullName: "Kevin Mwangi", admissionNumber: "ADM-0399", email: "", phone: "", programId: "", levelId: "", semesterId: "" },
+    ],
     getPendingStudents: async () => demoReqs.slice(),
     approveStudent: async (r) => { const i = demoReqs.findIndex((x) => x.id === r.id); if (i >= 0) demoReqs.splice(i, 1); window.__approved = r.id; },
     rejectStudent: async (r, reason) => { const i = demoReqs.findIndex((x) => x.id === r.id); if (i >= 0) demoReqs.splice(i, 1); window.__rejectedStudent = [r.id, reason]; },
@@ -1542,12 +1554,12 @@ const when = (t) => (t ? new Date(t).toLocaleString("en-GB", { day: "numeric", m
 let aTab = "payments", aReqs = null;
 
 async function renderAdminHome() {
-  const heading = aTab === "students" ? "Students waiting for approval" : aTab === "notices" ? "Announcements" : "Payments to confirm";
+  const heading = aTab === "students" ? "Students waiting for approval" : aTab === "notices" ? "Announcements" : aTab === "roll" ? "Students by class" : "Payments to confirm";
   root.innerHTML = `${topBar(false)}<main class="wrap">
     <section class="hero"><h1>${esc(adminProfile.fullName || user.email || "Administrator")}</h1>
       <p>${esc(info.institution || "")}<br>Administrator dashboard</p></section>
     <nav class="tabs" role="tablist" aria-label="Sections">
-      ${[["payments", "PAYMENTS"], ["students", "NEW STUDENTS"], ["notices", "NOTICES"]].map(([k, t]) =>
+      ${[["payments", "PAYMENTS"], ["students", "NEW STUDENTS"], ["roll", "ALL STUDENTS"], ["notices", "NOTICES"]].map(([k, t]) =>
         `<button class="tab" role="tab" data-at="${k}" aria-selected="${k === aTab}">${t}</button>`).join("")}
     </nav>
     <h2>${heading}</h2>
@@ -1564,6 +1576,7 @@ async function renderAdminHome() {
   };
   try {
     if (aTab === "notices") return wireNotices(box, [], adminProfile);
+    if (aTab === "roll") return wireRoll(box);
     if (aTab === "students") {
       aReqs = (await api.getPendingStudents(adminProfile.institutionId)).sort((a, b) => ms(a.createdAt) - ms(b.createdAt));
       return paintAdminStudents();
@@ -1571,6 +1584,39 @@ async function renderAdminHome() {
     aPays = (await api.getPendingPayments(adminProfile.institutionId)).sort((a, b) => ms(a.createdAt) - ms(b.createdAt));
   } catch (e) { return failed(e); }
   paintAdminPays();
+}
+
+// read-only list of every student, grouped by class, with a search box
+async function wireRoll(box) {
+  const all = await api.getAllStudents(adminProfile.institutionId);
+  const keys = [...new Set(all.map((x) => [x.programId, x.levelId, x.semesterId].join("|")))];
+  const names = {};
+  await Promise.all(keys.map(async (k) => {
+    const [programId, levelId, semesterId] = k.split("|");
+    try {
+      const n = programId ? await api.getClassNames({ institutionId: adminProfile.institutionId, programId, levelId, semesterId }) : {};
+      names[k] = [n.program, n.level, n.semester].filter(Boolean).join(" \u2022 ");
+    } catch (e) { names[k] = ""; }
+  }));
+  box.innerHTML = `<label for="rq">Search by name or admission number</label><input id="rq" type="search" autocomplete="off">
+    <p class="muted small" id="rcount"></p><div id="rlist"></div>`;
+  const paint = () => {
+    const q = document.getElementById("rq").value.trim().toLowerCase();
+    const hit = all.filter((x) => !q || (x.fullName || "").toLowerCase().includes(q) || String(x.admissionNumber || "").toLowerCase().includes(q));
+    document.getElementById("rcount").textContent = hit.length + " of " + all.length + " students";
+    const groups = {};
+    hit.forEach((x) => { const k = [x.programId, x.levelId, x.semesterId].join("|"); (groups[k] ||= []).push(x); });
+    const order = Object.keys(groups).sort((a, b) => (names[a] || "\uffff").localeCompare(names[b] || "\uffff"));
+    document.getElementById("rlist").innerHTML = order.length ? order.map((k) => `
+      <h3 style="margin-top:16px">${esc(names[k] || "No class assigned yet")} <span class="muted small">(${groups[k].length})</span></h3>
+      ${groups[k].sort((a, b) => (a.fullName || "").localeCompare(b.fullName || "")).map((x) => `
+        <div class="card" style="margin-top:6px"><div class="row"><div><h3 class="ut">${esc(x.fullName || "")}</h3>
+          <div class="muted small">Adm: <span class="ut">${esc(x.admissionNumber || "")}</span></div></div></div>
+          ${x.phone || x.email ? `<div class="muted small ut">${esc([x.phone, x.email].filter(Boolean).join(" \u2022 "))}</div>` : ""}</div>`).join("")}`).join("")
+      : '<div class="empty">No students found.</div>';
+  };
+  document.getElementById("rq").oninput = paint;
+  paint();
 }
 
 function paintAdminStudents() {
