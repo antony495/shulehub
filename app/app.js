@@ -1,4 +1,4 @@
-/* ShuleHub Web - student and parent portal (version 16, saved marks shown)
+/* ShuleHub Web - student and parent portal (version 17, saved marks shown, typing-safe)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
@@ -1530,17 +1530,22 @@ async function wireMarks(view, unit) {
       rows.querySelector(`[data-g="${CSS.escape(el.dataset.m)}"]`).textContent = el.value.trim() && g ? g.grade : "";
     });
   };
-  rows.querySelectorAll("[data-m]").forEach((el) => (el.oninput = () => { marks[el.dataset.m] = el.value; regrade(); }));
+  const typed = new Set();   // boxes the teacher has typed in: saved marks must never overwrite these
+  rows.querySelectorAll("[data-m]").forEach((el) => (el.oninput = () => { typed.add(el.dataset.m); marks[el.dataset.m] = el.value; regrade(); }));
   totalEl.oninput = regrade;
   // show marks already saved for this exam so a teacher can correct them instead of starting blank
+  let shownExam = null;
   const showSaved = async () => {
     const exam = examEl.value.trim();
-    if (!exam) return;
+    if (!exam || exam === shownExam) return;
+    if (shownExam !== null) typed.clear();   // a different exam: start fresh
+    shownExam = exam;
     let saved = {};
     try { saved = await api.getSavedMarks(unit, exam, tStudents); } catch (e) { saved = {}; }
     if (exam !== examEl.value.trim()) return;
     const ids = Object.keys(saved);
     rows.querySelectorAll("[data-m]").forEach((el) => {
+      if (typed.has(el.dataset.m)) return;
       const r = saved[el.dataset.m];
       el.value = r && Number.isFinite(Number(r.marks)) ? String(r.marks) : "";
       marks[el.dataset.m] = el.value;
