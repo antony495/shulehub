@@ -1,4 +1,4 @@
-/* ShuleHub Web - student and parent portal (version 13, administrator payments and new students)
+/* ShuleHub Web - student and parent portal (version 14, announcements)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
@@ -161,7 +161,18 @@ const SW_PHRASES = [
   ["Or reject it. Reason (shown to the student)", "Au ikatae. Sababu (itaonyeshwa kwa mwanafunzi)"],
   ["Admission number:", "Nambari ya usajili:"], ["Paid from:", "Imelipwa kutoka:"], ["Paid by parent:", "Imelipwa na mzazi:"], ["Submitted:", "Imetumwa:"],
   ["CONFIRM PAYMENT", "THIBITISHA MALIPO"], ["REJECT PAYMENT", "KATAA MALIPO"], ["PLEASE WAIT…", "TAFADHALI SUBIRI…"], ["REVIEW", "KAGUA"], ["CLOSE", "FUNGA"],
-  ["Confirm payments and approve new students here. Everything else is in the ShuleHub app.", "Thibitisha malipo na idhinisha wanafunzi wapya hapa. Mengine yote yako kwenye programu ya ShuleHub."],
+  ["Confirm payments, approve new students and post announcements here. Everything else is in the ShuleHub app.", "Thibitisha malipo, idhinisha wanafunzi wapya na weka matangazo hapa. Mengine yote yako kwenye programu ya ShuleHub."],
+  ["ShuleHub Web shows your school records. Report payments on the PAY tab.", "ShuleHub Web inaonyesha rekodi za shule yako. Ripoti malipo kwenye kichupo cha LIPA."], ["DELETE", "FUTA"],
+  ["My previous announcements", "Matangazo yangu ya awali"], ["Title", "Kichwa"], ["Message", "Ujumbe"],
+  ["NOTICES", "MATANGAZO"], ["No announcements yet.", "Hakuna matangazo bado."], ["Announcements", "Matangazo"],
+  ["Who should see it?", "Nani aone?"], ["All students in my institution", "Wanafunzi wote katika taasisi yangu"],
+  ["Please enter a title and a message.", "Tafadhali andika kichwa na ujumbe."], ["POST ANNOUNCEMENT", "WEKA TANGAZO"], ["POSTING…", "INAWEKA…"],
+  ["Announcement posted.", "Tangazo limewekwa."], ["Announcement deleted.", "Tangazo limefutwa."],
+  ["None yet.", "Hakuna bado."], ["Everyone", "Wote"],
+  ["You are not allowed to post this. Please use the ShuleHub app.", "Huruhusiwi kuweka hili. Tafadhali tumia programu ya ShuleHub."],
+  ["Could not post. Please check your internet and try again.", "Imeshindikana kuweka. Tafadhali angalia intaneti na ujaribu tena."],
+  ["Could not delete. Please try again.", "Imeshindikana kufuta. Tafadhali jaribu tena."],
+  ["Delete this announcement? Students will no longer see it.", "Futa tangazo hili? Wanafunzi hawataliona tena."],
   ["No new students are waiting for approval.", "Hakuna wanafunzi wapya wanaosubiri idhini."],
   ["Students waiting for approval", "Wanafunzi wanaosubiri idhini"], ["NEW STUDENTS", "WANAFUNZI WAPYA"], ["PAYMENTS", "MALIPO"],
   ["Approve only students you know. You can assign their class afterwards in the ShuleHub app.", "Idhinisha tu wanafunzi unaowajua. Unaweza kuwapangia darasa baadaye kwenye programu ya ShuleHub."],
@@ -283,6 +294,7 @@ function rewriteTerms() {
     for (const n of nodes) {
       const p = n.parentNode && n.parentNode.nodeName;
       if (p === "SCRIPT" || p === "STYLE") continue;
+      if (n.parentNode.closest && n.parentNode.closest(".ut")) continue;   // text typed by people is never reworded or translated
       const before = n.nodeValue;
       const after = LANG === "sw" ? swTranslate(before) : applyTermsTo(before);
       if (after !== before) n.nodeValue = after;
@@ -556,6 +568,15 @@ async function makeFirebase() {
       }
       return {};
     },
+    async getNotices(inst) {
+      const q = fs.query(fs.collection(db, "announcements"), fs.where("institutionId", "==", inst));
+      return docs(await fs.getDocs(q));
+    },
+    async getMyNotices(uid) {
+      return docs(await fs.getDocs(fs.query(fs.collection(db, "announcements"), fs.where("teacherUid", "==", uid))));
+    },
+    postNotice: (n) => fs.addDoc(fs.collection(db, "announcements"), n),
+    deleteNotice: (id) => fs.deleteDoc(fs.doc(db, "announcements", id)),
     async getPendingStudents(inst) {
       const q = fs.query(fs.collection(db, "studentRegistrationRequests"), fs.where("institutionId", "==", inst), fs.where("status", "==", "pending"));
       return docs(await fs.getDocs(q));
@@ -596,6 +617,11 @@ function makeDemo() {
   const demoPending = [
     { id: "i_QGH7K2LM9P", mpesaCode: "QGH7K2LM9P", studentName: "Brian Otieno (demo)", admissionNumber: "ADM-0231", amount: 12000, feeDescription: "Term 3 fees", phone: "0712345678", createdAt: now - 3e6, status: "pending" },
     { id: "i_RTX4P0QW1Z", mpesaCode: "RTX4P0QW1Z", studentName: "Faith Otieno (demo)", admissionNumber: "ADM-0310", amount: 5000, feeDescription: "Trip to Nairobi", phone: "0722000111", parentName: "Mrs Otieno", createdAt: now - 9e6, status: "pending" },
+  ];
+  const demoNotes = [
+    { id: "n0", title: "Parents meeting", message: "Parents meeting on Friday at 10am in the hall.", teacherName: "Mrs Njeri", teacherUid: "me", institutionId: "i", programId: "", levelId: "", semesterId: "", unitName: "", createdAt: now - 8e7 },
+    { id: "n1", title: "Maths test", message: "Maths test on Monday. Revise chapters 4 and 5.", teacherName: "Mr Kamau", teacherUid: "x", institutionId: "i", programId: "p", levelId: "l", semesterId: "s", unitName: "Mathematics", createdAt: now - 4e7 },
+    { id: "n2", title: "Other class", message: "This is for another class.", teacherName: "Mr Kamau", teacherUid: "x", institutionId: "i", programId: "p", levelId: "zzz", semesterId: "s", unitName: "Physics", createdAt: now - 3e7 },
   ];
   const demoReqs = [
     { id: "r1", fullName: "Peter Kimani", email: "peter@example.com", phone: "0700111222", admissionNumber: "ADM-0400", createdAt: now - 5e6 },
@@ -672,6 +698,10 @@ function makeDemo() {
       { min: 80, grade: "A", points: 12, remark: "Excellent" }, { min: 60, grade: "B", points: 9, remark: "Good" },
       { min: 40, grade: "C", points: 6, remark: "Fair" }, { min: 0, grade: "E", points: 1, remark: "Very poor" }] }),
     saveMarks: async (x) => { window.__marks = x; },
+    getNotices: async () => demoNotes.slice(),
+    getMyNotices: async () => demoNotes.filter((n) => n.teacherUid === "me"),
+    postNotice: async (n) => { demoNotes.push({ id: "n" + demoNotes.length, ...n, teacherUid: "me" }); window.__posted = n; },
+    deleteNotice: async (id) => { const i = demoNotes.findIndex((x) => x.id === id); if (i >= 0) demoNotes.splice(i, 1); },
     getPendingStudents: async () => demoReqs.slice(),
     approveStudent: async (r) => { const i = demoReqs.findIndex((x) => x.id === r.id); if (i >= 0) demoReqs.splice(i, 1); window.__approved = r.id; },
     rejectStudent: async (r, reason) => { const i = demoReqs.findIndex((x) => x.id === r.id); if (i >= 0) demoReqs.splice(i, 1); window.__rejectedStudent = [r.id, reason]; },
@@ -872,7 +902,7 @@ function renderShell() {
       <p>${esc(info.institution || "")}${klass ? "<br>" + esc(klass) : ""}${subject.admission || subject.admissionNumber ? "<br>Adm: " + esc(subject.admission || subject.admissionNumber) : ""}</p>
     </section>
     <nav class="tabs" role="tablist" aria-label="Sections">
-      ${[["fees", "FEES"], ["pay", "PAY"], ["results", "RESULTS"], ["report", "REPORT CARD"], ["attendance", "ATTENDANCE"], ["timetable", "TIMETABLE"]].map(([k, t]) =>
+      ${[["fees", "FEES"], ["pay", "PAY"], ["results", "RESULTS"], ["report", "REPORT CARD"], ["attendance", "ATTENDANCE"], ["timetable", "TIMETABLE"], ["notices", "NOTICES"]].map(([k, t]) =>
         `<button class="tab" role="tab" data-tab="${k}" aria-selected="${k === tab}">${t}</button>`).join("")}
     </nav>
     <div id="view"></div>
@@ -911,6 +941,10 @@ async function renderView() {
     } else if (tab === "attendance") {
       cache.att ??= role === "parent" ? await api.getChildAttendance(who.id) : await api.getStudentAttendance(who);
       html = attendanceHtml(cache.att);
+    } else if (tab === "notices") {
+      cache.notes ??= await api.getNotices(who.institutionId);
+      html = noticesHtml(cache.notes.filter((n) => !n.programId ||
+        (n.programId === who.programId && n.levelId === who.levelId && n.semesterId === who.semesterId)));
     } else {
       cache.tt ??= await api.getTimetable(who);
       html = timetableHtml(cache.tt);
@@ -1253,6 +1287,8 @@ async function renderTeacherHome() {
       <p>${esc(info.institution || "")}<br>Teacher dashboard</p></section>
     <h2>My subjects</h2>
     <div id="units"><p class="muted">Loading…</p></div>
+    <h2>Announcements</h2>
+    <div id="tnotes"><p class="muted">Loading…</p></div>
     <footer class="foot">Take attendance and enter class marks here. Homework and messages are in the ShuleHub app. &middot;
       <a href="../privacy.html">Privacy policy</a></footer></main>`;
   document.getElementById("out").onclick = () => api.signOut();
@@ -1263,6 +1299,7 @@ async function renderTeacherHome() {
     box.innerHTML = '<p class="msg" role="alert">Could not load this page. Please check your internet and try again.</p>';
     return;
   }
+  wireNotices(document.getElementById("tnotes"), tUnits, teacherProfile);
   if (!tUnits.length) {
     box.innerHTML = '<div class="empty">No subject has been assigned to you yet. Ask your administrator to assign your subjects.</div>';
     return;
@@ -1303,6 +1340,59 @@ function renderTeacherUnit() {
         : "Could not load this page. Please check your internet and try again."}</p>`;
     }
   })();
+}
+
+function noticesHtml(list) {
+  if (!list.length) return '<div class="empty">No announcements yet.</div>';
+  return [...list].sort((a, b) => ms(b.createdAt) - ms(a.createdAt)).map((n) => `
+    <div class="card" style="margin-top:8px"><h3 class="ut">${esc(n.title || "")}</h3>
+      <div class="muted small">${esc(n.teacherName || "")}${n.unitName ? " \u2022 " + esc(n.unitName) : ""} \u2022 ${esc(when(num(n.createdAt)))}</div>
+      <p class="ut" style="white-space:pre-wrap">${esc(n.message || "")}</p></div>`).join("");
+}
+
+// post and manage announcements (teacher: everyone or one subject; administrator: everyone)
+async function wireNotices(box, units, profile) {
+  let mine = [], msg = "";
+  const draw = () => {
+    box.innerHTML = `${msg ? `<p class="msg good" role="alert">${esc(msg)}</p>` : ""}
+      <label for="nto">Who should see it?</label>
+      <select id="nto"><option value="">All students in my institution</option>
+        ${units.map((u, i) => `<option value="${i}">${esc(unitTitle(u))} class (${esc(fullClass(u))})</option>`).join("")}</select>
+      <label for="nt">Title</label><input id="nt" type="text" maxlength="100">
+      <label for="nm">Message</label><textarea id="nm" rows="5" maxlength="1000"></textarea>
+      <p class="msg" id="nerr" role="alert" hidden></p>
+      <button class="btn" id="npost" type="button">POST ANNOUNCEMENT</button>
+      <h2>My previous announcements</h2>
+      ${mine.length ? [...mine].sort((a, b) => ms(b.createdAt) - ms(a.createdAt)).map((n) => `
+        <div class="card" style="margin-top:8px"><h3 class="ut">${esc(n.title || "")}</h3>
+          <div class="muted small">${n.unitName ? esc(n.unitName) : "Everyone"} \u2022 ${esc(when(num(n.createdAt)))}</div>
+          <p class="ut" style="white-space:pre-wrap">${esc(n.message || "")}</p>
+          <button class="btn ghost" data-del="${esc(n.id)}" type="button">DELETE</button></div>`).join("")
+        : '<div class="empty">None yet.</div>'}`;
+    const err = (t) => { const e = document.getElementById("nerr"); e.hidden = !t; e.textContent = t || ""; };
+    document.getElementById("npost").onclick = async (ev) => {
+      const title = document.getElementById("nt").value.trim(), body = document.getElementById("nm").value.trim();
+      if (!title || !body) return err("Please enter a title and a message.");
+      const v = document.getElementById("nto").value, u = v === "" ? null : units[Number(v)];
+      ev.target.disabled = true; ev.target.textContent = "POSTING…"; err("");
+      try {
+        await api.postNotice({ title, message: body, teacherUid: user.uid, teacherName: profile.fullName || user.email || "",
+          institutionId: profile.institutionId, programId: u ? u.programId || "" : "", levelId: u ? u.levelId || "" : "",
+          semesterId: u ? u.semesterId || "" : "", unitName: u ? u.unitName || "" : "", createdAt: Date.now() });
+        mine = await api.getMyNotices(user.uid); msg = "Announcement posted."; draw();
+      } catch (e) {
+        ev.target.disabled = false; ev.target.textContent = "POST ANNOUNCEMENT";
+        err(e && e.code === "permission-denied" ? "You are not allowed to post this. Please use the ShuleHub app." : "Could not post. Please check your internet and try again.");
+      }
+    };
+    box.querySelectorAll("[data-del]").forEach((b) => (b.onclick = async () => {
+      if (!confirm("Delete this announcement? Students will no longer see it.")) return;
+      try { await api.deleteNotice(b.dataset.del); mine = await api.getMyNotices(user.uid); msg = "Announcement deleted."; draw(); }
+      catch (e) { alert("Could not delete. Please try again."); }
+    }));
+  };
+  try { mine = await api.getMyNotices(user.uid); draw(); }
+  catch (e) { box.innerHTML = '<p class="msg" role="alert">Could not load this page. Please check your internet and try again.</p>'; }
 }
 
 const STATUSES = ["present", "late", "absent", "excused"];
@@ -1452,17 +1542,17 @@ const when = (t) => (t ? new Date(t).toLocaleString("en-GB", { day: "numeric", m
 let aTab = "payments", aReqs = null;
 
 async function renderAdminHome() {
-  const heading = aTab === "students" ? "Students waiting for approval" : "Payments to confirm";
+  const heading = aTab === "students" ? "Students waiting for approval" : aTab === "notices" ? "Announcements" : "Payments to confirm";
   root.innerHTML = `${topBar(false)}<main class="wrap">
     <section class="hero"><h1>${esc(adminProfile.fullName || user.email || "Administrator")}</h1>
       <p>${esc(info.institution || "")}<br>Administrator dashboard</p></section>
     <nav class="tabs" role="tablist" aria-label="Sections">
-      ${[["payments", "PAYMENTS"], ["students", "NEW STUDENTS"]].map(([k, t]) =>
+      ${[["payments", "PAYMENTS"], ["students", "NEW STUDENTS"], ["notices", "NOTICES"]].map(([k, t]) =>
         `<button class="tab" role="tab" data-at="${k}" aria-selected="${k === aTab}">${t}</button>`).join("")}
     </nav>
     <h2>${heading}</h2>
     <div id="apay"><p class="muted">Loading…</p></div>
-    <footer class="foot">Confirm payments and approve new students here. Everything else is in the ShuleHub app. &middot;
+    <footer class="foot">Confirm payments, approve new students and post announcements here. Everything else is in the ShuleHub app. &middot;
       <a href="../privacy.html">Privacy policy</a></footer></main>`;
   document.getElementById("out").onclick = () => api.signOut();
   root.querySelectorAll("[data-at]").forEach((b) => (b.onclick = () => { aTab = b.dataset.at; aOpen = ""; aMsg = ""; renderAdminHome(); }));
@@ -1473,6 +1563,7 @@ async function renderAdminHome() {
       : "Could not load this page. Please check your internet and try again."}</p>`;
   };
   try {
+    if (aTab === "notices") return wireNotices(box, [], adminProfile);
     if (aTab === "students") {
       aReqs = (await api.getPendingStudents(adminProfile.institutionId)).sort((a, b) => ms(a.createdAt) - ms(b.createdAt));
       return paintAdminStudents();
