@@ -1,4 +1,4 @@
-/* ShuleHub Web - student and parent portal (version 15, student lists)
+/* ShuleHub Web - student and parent portal (version 16, saved marks shown)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
@@ -165,6 +165,7 @@ const SW_PHRASES = [
   ["ShuleHub Web shows your school records. Report payments on the PAY tab.", "ShuleHub Web inaonyesha rekodi za shule yako. Ripoti malipo kwenye kichupo cha LIPA."], ["DELETE", "FUTA"],
   ["My previous announcements", "Matangazo yangu ya awali"], ["Title", "Kichwa"], ["Message", "Ujumbe"],
   [/(\d+) of (\d+) students/g, "Wanafunzi $1 kati ya $2"],
+  [/Showing (\d+) marks? you already saved for (.+)\. Change them and save to correct them\./g, "Inaonyesha alama $1 ulizohifadhi tayari za $2. Zibadilishe na uhifadhi ili kuzisahihisha."],
   ["ALL STUDENTS", "WANAFUNZI WOTE"], ["Students by class", "Wanafunzi kwa darasa"], ["Search by name or admission number", "Tafuta kwa jina au nambari ya usajili"],
   ["No students found.", "Hakuna wanafunzi waliopatikana."], ["No class assigned yet", "Bado hajapangiwa darasa"],
   ["NOTICES", "MATANGAZO"], ["No announcements yet.", "Hakuna matangazo bado."], ["Announcements", "Matangazo"],
@@ -507,6 +508,17 @@ async function makeFirebase() {
         return bands.length ? { name: d.get("name") || "Custom", bands, passMark: num(d.get("passMark")) || 40 } : null;
       } catch (e) { return null; }
     },
+    // marks this teacher already saved for one exam; a student with nothing saved (or not readable) is simply left out
+    async getSavedMarks(unit, exam, students) {
+      const id = resultIdFor(unit.unitName, unit.semesterId, exam), out = {};
+      await Promise.all(students.map(async (st) => {
+        try {
+          const d = await fs.getDoc(fs.doc(db, "students", st.uid, "results", id));
+          if (d.exists() && d.get("teacherUid") === auth.currentUser.uid) out[st.uid] = { marks: d.get("marks"), totalMarks: d.get("totalMarks") };
+        } catch (e) { /* not saved yet */ }
+      }));
+      return out;
+    },
     async saveMarks({ unit, institutionId, teacher, teacherUid, exam, total, entries }) {
       const now = Date.now();
       for (let i = 0; i < entries.length; i += 10) {
@@ -703,6 +715,7 @@ function makeDemo() {
     getGrading: async () => ({ name: "Secondary", passMark: 40, bands: [
       { min: 80, grade: "A", points: 12, remark: "Excellent" }, { min: 60, grade: "B", points: 9, remark: "Good" },
       { min: 40, grade: "C", points: 6, remark: "Fair" }, { min: 0, grade: "E", points: 1, remark: "Very poor" }] }),
+    getSavedMarks: async (unit, exam, students) => (exam === "Mid-term" && students[0] ? { [students[0].uid]: { marks: 72, totalMarks: 100 } } : {}),
     saveMarks: async (x) => { window.__marks = x; },
     getNotices: async () => demoNotes.slice(),
     getMyNotices: async () => demoNotes.filter((n) => n.teacherUid === "me"),
@@ -1519,6 +1532,25 @@ async function wireMarks(view, unit) {
   };
   rows.querySelectorAll("[data-m]").forEach((el) => (el.oninput = () => { marks[el.dataset.m] = el.value; regrade(); }));
   totalEl.oninput = regrade;
+  // show marks already saved for this exam so a teacher can correct them instead of starting blank
+  const showSaved = async () => {
+    const exam = examEl.value.trim();
+    if (!exam) return;
+    let saved = {};
+    try { saved = await api.getSavedMarks(unit, exam, tStudents); } catch (e) { saved = {}; }
+    if (exam !== examEl.value.trim()) return;
+    const ids = Object.keys(saved);
+    rows.querySelectorAll("[data-m]").forEach((el) => {
+      const r = saved[el.dataset.m];
+      el.value = r && Number.isFinite(Number(r.marks)) ? String(r.marks) : "";
+      marks[el.dataset.m] = el.value;
+    });
+    if (ids.length) totalEl.value = String(saved[ids[0]].totalMarks);
+    regrade();
+    say(ids.length ? `Showing ${ids.length} mark${ids.length === 1 ? "" : "s"} you already saved for ${exam}. Change them and save to correct them.` : "", true);
+  };
+  examEl.onchange = showSaved;
+  showSaved();
 
   view.querySelector("#msave").onclick = async (ev) => {
     const btn = ev.currentTarget; say("");
