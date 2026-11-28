@@ -1,4 +1,4 @@
-/* ShuleHub Web - student and parent portal (version 10, payment document id fix)
+/* ShuleHub Web - student and parent portal (version 11, teacher pages)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
@@ -94,13 +94,17 @@ document.documentElement.lang = LANG;
 
 // longest and most specific first; plain strings match whole words, ignoring case
 const SW_PHRASES = [
+  [/Attendance saved: (\d+) of (\d+) attended, (\d+) absent\./g, "Mahudhurio yamehifadhiwa: $1 kati ya $2 wamehudhuria, $3 hawapo."],
+  [/Saved marks for (\d+) students? \((.+?)\)\. Grades came from your (?:school|university|college|institution)'s grading scale\./g, "Alama za wanafunzi $1 zimehifadhiwa ($2). Madaraja yametoka kwenye vipimo vya alama vya shule yako."],
+  [/Check the marks for (.+?)\. They must be a number from 0 to (\d+)\./g, "Angalia alama za $1. Lazima ziwe nambari kuanzia 0 hadi $2."],
+  [/^Marks$/g, "Alama"],
   [/Present (\d+) of (\d+) sessions/g, "Amehudhuria $1 kati ya $2 vipindi"],
   [/\b(?:Term|Semester) (\d+) fees\b/gi, "Ada ya Muhula $1"],
   [/\bTerm (\d+)\b/gi, "Muhula $1"], [/\bSemester (\d+)\b/gi, "Muhula $1"],
   [/\bForm (\d+)\b/gi, "Kidato $1"], [/\bGrade (\d+)\b/gi, "Darasa la $1"], [/\bYear (\d+)\b/gi, "Mwaka wa $1"],
   [/(\d+) out of (\d+)/g, "$1 kati ya $2"],
-  ["Teachers and administrators: please use the ShuleHub app for now. Their web pages are coming soon.", "Walimu na wasimamizi: tafadhali tumia programu ya ShuleHub kwa sasa. Kurasa zao za wavuti zinakuja hivi karibuni."],
-  ["This website is for students and parents. Teachers and administrators: please use the ShuleHub app for now.", "Tovuti hii ni ya wanafunzi na wazazi. Walimu na wasimamizi: tafadhali tumia programu ya ShuleHub kwa sasa."],
+  ["Administrators: please use the ShuleHub app for now. Their web pages are coming soon.", "Walimu na wasimamizi: tafadhali tumia programu ya ShuleHub kwa sasa. Kurasa zao za wavuti zinakuja hivi karibuni."],
+  ["This website is for students, parents and teachers. Administrators: please use the ShuleHub app for now.", "Tovuti hii ni ya wanafunzi na wazazi. Walimu na wasimamizi: tafadhali tumia programu ya ShuleHub kwa sasa."],
   ["Your School, Your Learning, Your Future", "Shule Yako, Masomo Yako, Kesho Yako"],
   ["Student or parent login", "Kuingia kwa mwanafunzi au mzazi"],
   ["Type your email above first, then tap Forgot password.", "Andika barua pepe yako juu kwanza, kisha bonyeza Umesahau nenosiri."],
@@ -122,6 +126,26 @@ const SW_PHRASES = [
   ["No fees have been recorded yet, so there is nothing to pay.", "Hakuna ada iliyorekodiwa bado, kwa hiyo hakuna cha kulipa."],
   ["CREDIT (PAID IN ADVANCE)", "SALIO LA ZIADA (LIMELIPWA MAPEMA)"],
   ["PART PAID", "IMELIPWA SEHEMU"],
+  ["Student, parent or teacher login", "Kuingia kwa mwanafunzi, mzazi au mwalimu"],
+  ["Administrators: please use the ShuleHub app for now. Their web pages are coming soon.", "Wasimamizi: tafadhali tumia programu ya ShuleHub kwa sasa. Kurasa zao za wavuti zinakuja hivi karibuni."],
+  ["This website is for students, parents and teachers. Administrators: please use the ShuleHub app for now.", "Tovuti hii ni ya wanafunzi, wazazi na walimu. Wasimamizi: tafadhali tumia programu ya ShuleHub kwa sasa."],
+  ["Take attendance and enter class marks here. Homework and messages are in the ShuleHub app.", "Chukua mahudhurio na weka alama za darasa hapa. Kazi za nyumbani na ujumbe ziko kwenye programu ya ShuleHub."],
+  ["No subject has been assigned to you yet. Ask your administrator to assign your subjects.", "Hujapewa somo lolote bado. Muulize msimamizi wako akupe masomo."],
+  ["No students are assigned to this class yet.", "Hakuna wanafunzi waliowekwa kwenye darasa hili bado."],
+  ["You are not allowed to save this. Check that this subject is assigned to you, or use the ShuleHub app.", "Huruhusiwi kuhifadhi hili. Hakikisha somo hili umepewa, au tumia programu ya ShuleHub."],
+  ["You are not allowed to save these marks. Check that this subject is assigned to you, or use the ShuleHub app.", "Huruhusiwi kuhifadhi alama hizi. Hakikisha somo hili umepewa, au tumia programu ya ShuleHub."],
+  ["Could not save. Please check your internet and try again.", "Imeshindikana kuhifadhi. Tafadhali angalia intaneti na ujaribu tena."],
+  ["Your school has not set a grading scale yet. Ask your administrator to open GRADING SCALE in the ShuleHub app. You cannot save marks until then.", "Shule yako haijaweka vipimo vya alama bado. Muulize msimamizi afungue GRADING SCALE kwenye programu ya ShuleHub. Huwezi kuhifadhi alama hadi hapo."],
+  ["Enter the total marks, for example 100.", "Weka jumla ya alama, kwa mfano 100."],
+  ["Enter the exam name.", "Weka jina la mtihani."],
+  ["Enter marks for at least one student.", "Weka alama za angalau mwanafunzi mmoja."],
+  ["Exam (for example CAT 1, Mid-term, End of term)", "Mtihani (kwa mfano CAT 1, Katikati ya muhula, Mwisho wa muhula)"],
+  ["Note (optional; the student and parent can see it)", "Maelezo (si lazima; mwanafunzi na mzazi wanaweza kuyaona)"],
+  ["Grades came from your school's grading scale.", "Madaraja yametoka kwenye vipimo vya alama vya shule yako."],
+  ["Grading scale:", "Vipimo vya alama:"],
+  ["BACK TO MY SUBJECTS", "RUDI KWA MASOMO YANGU"], ["My subjects", "Masomo yangu"], ["Teacher dashboard", "Ukurasa wa mwalimu"],
+  ["MARK ALL PRESENT", "WEKA WOTE WAMEHUDHURIA"], ["SAVE ATTENDANCE", "HIFADHI MAHUDHURIO"], ["SAVE ALL MARKS", "HIFADHI ALAMA ZOTE"],
+  ["CLASS MARKS", "ALAMA ZA DARASA"], ["SAVING…", "INAHIFADHI…"], ["Total marks", "Jumla ya alama"], ["Date", "Tarehe"],
   ["No child is linked to your account yet. Use the ShuleHub app to add a child.", "Hakuna mtoto aliyeunganishwa na akaunti yako bado. Tumia programu ya ShuleHub kuongeza mtoto."],
   ["No fees have been recorded yet.", "Hakuna ada iliyorekodiwa bado."],
   ["No results have been published yet. Please check again later.", "Hakuna matokeo yaliyochapishwa bado. Tafadhali angalia tena baadaye."],
@@ -394,6 +418,68 @@ async function makeFirebase() {
       try { out.remarks = docs(await fs.getDocs(fs.collection(db, "students", st.id, "teacherRemarks"))); } catch (e) { /* none */ }
       return out;
     },
+    // ----- teachers -----
+    async getTeacher(uid) {
+      const s = await fs.getDoc(fs.doc(db, "teachers", uid));
+      return s.exists() ? { id: s.id, ...s.data() } : null;
+    },
+    async getAssignedUnits(uid) {
+      return docs(await fs.getDocs(fs.collection(db, "teachers", uid, "assigned_units")));
+    },
+    async getClassStudents(inst, u) {
+      const q = fs.query(fs.collection(db, "students"), fs.where("institutionId", "==", inst));
+      return docs(await fs.getDocs(q))
+        .filter((s) => s.programId === u.programId && s.levelId === u.levelId && s.semesterId === u.semesterId)
+        .map((s) => ({ uid: s.id, name: s.fullName || s.email || "Student", admission: s.admissionNumber || "" }))
+        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    },
+    async getRegister(unitId, date) {
+      const s = await fs.getDoc(fs.doc(db, "attendance", unitId + "_" + date));
+      return s.exists() ? s.data() : null;
+    },
+    // the class register, plus one private record per student, in groups of 10 (the same as the app)
+    async saveAttendance({ unit, institutionId, teacherUid, date, statuses, notes, students }) {
+      const id = unit.unitId + "_" + date, now = Date.now();
+      const attended = Object.values(statuses).filter((x) => x === "present" || x === "late").length;
+      for (let i = 0; i < students.length; i += 10) {
+        const batch = fs.writeBatch(db);
+        if (i === 0) batch.set(fs.doc(db, "attendance", id), {
+          unitId: unit.unitId, unitName: unit.unitName, unitCode: unit.unitCode || "", date, institutionId, teacherUid,
+          programId: unit.programId, levelId: unit.levelId, semesterId: unit.semesterId,
+          records: statuses, notes, totalStudents: students.length, presentCount: attended, savedAt: now,
+        });
+        students.slice(i, i + 10).forEach((s) => batch.set(fs.doc(db, "students", s.uid, "attendance", id), {
+          unitId: unit.unitId, unitName: unit.unitName, unitCode: unit.unitCode || "", date, institutionId, teacherUid,
+          status: statuses[s.uid] || "present", note: notes[s.uid] || "", savedAt: now,
+        }));
+        await batch.commit();
+      }
+    },
+    async getGrading(inst) {
+      try {
+        const d = await fs.getDoc(fs.doc(db, "institutions", inst, "settings", "grading"));
+        const raw = d.exists() ? d.get("bands") : null;
+        if (!Array.isArray(raw)) return null;
+        const bands = raw.filter((m) => m && typeof m.grade === "string")
+          .map((m) => ({ min: num(m.min), grade: m.grade, points: num(m.points), remark: m.remark || "" }));
+        return bands.length ? { name: d.get("name") || "Custom", bands, passMark: num(d.get("passMark")) || 40 } : null;
+      } catch (e) { return null; }
+    },
+    async saveMarks({ unit, institutionId, teacher, teacherUid, exam, total, entries }) {
+      const now = Date.now();
+      for (let i = 0; i < entries.length; i += 10) {
+        const batch = fs.writeBatch(db);
+        entries.slice(i, i + 10).forEach(({ student, marks, band }) => batch.set(
+          fs.doc(db, "students", student.uid, "results", resultIdFor(unit.unitName, unit.semesterId, exam)), {
+            unitName: unit.unitName, unitCode: unit.unitCode || "", marks, totalMarks: total,
+            grade: band ? band.grade : "", points: band ? band.points : 0, gradeRemark: band ? band.remark : "",
+            published: true, teacherUid, teacherName: teacher.fullName || teacher.email || "Teacher",
+            institutionId, programId: unit.programId, levelId: unit.levelId, semesterId: unit.semesterId,
+            assessment: exam, publishedAt: now, updatedAt: now,
+          }, { merge: true }));
+        await batch.commit();
+      }
+    },
     // the document id is schoolId_code, so one school cannot block another school's code,
     // and sending the same code twice to the same school is refused by the rules
     submitPayment: (data) => fs.setDoc(fs.doc(db, "payment_submissions", data.institutionId + "_" + data.mpesaCode), data),
@@ -419,8 +505,8 @@ function makeDemo() {
   return {
     onUser: (f) => { cb = f; setTimeout(() => f(null), 0); return () => {}; },
     signIn: async (email) => {
-      role = /parent/i.test(email) ? "parent" : "student";
-      setTimeout(() => cb && cb({ uid: role === "parent" ? "dp" : "demo", email }), 50);
+      role = /teacher/i.test(email) ? "teacher" : /parent/i.test(email) ? "parent" : "student";
+      setTimeout(() => cb && cb({ uid: role === "parent" ? "dp" : role === "teacher" ? "dt" : "demo", email }), 50);
     },
     signOut: async () => { cb && cb(null); },
     resetPassword: async () => {},
@@ -466,6 +552,19 @@ function makeDemo() {
       if (demoPays.some((p) => p.mpesaCode === data.mpesaCode)) { const e = new Error("dup"); e.code = "permission-denied"; throw e; }
       demoPays.push({ ...data, id: data.mpesaCode });
     },
+    getTeacher: async (uid) => (uid === "dt" ? { id: "dt", fullName: "Mr Kamau (demo)", email: "teacher@example.com", institutionId: "i" } : null),
+    getAssignedUnits: async () => [
+      { id: "u1", unitId: "u1", unitName: "Mathematics", unitCode: "MAT", programId: "p", levelId: "l", semesterId: "s", programName: "Secondary", levelName: "Form 3", semesterName: "Term 3" },
+      { id: "u2", unitId: "u2", unitName: "Physics", unitCode: "PHY", programId: "p", levelId: "l", semesterId: "s", programName: "Secondary", levelName: "Form 3", semesterName: "Term 3" },
+    ],
+    getClassStudents: async () => ["Alice Wanjiku", "Brian Otieno", "Faith Achieng", "Martin Maina", "Morris Murigi"]
+      .map((n, i) => ({ uid: "s" + i, name: n, admission: "ADM-0" + (140 + i) })),
+    getRegister: async () => null,
+    saveAttendance: async (x) => { window.__att = x; },
+    getGrading: async () => ({ name: "Secondary", passMark: 40, bands: [
+      { min: 80, grade: "A", points: 12, remark: "Excellent" }, { min: 60, grade: "B", points: 9, remark: "Good" },
+      { min: 40, grade: "C", points: 6, remark: "Fair" }, { min: 0, grade: "E", points: 1, remark: "Very poor" }] }),
+    saveMarks: async (x) => { window.__marks = x; },
     getTimetable: async () => {
       const t = (day, s, e, subject, room, teacherName) => ({ id: day + s, day, startTime: s, endTime: e, subject, room, teacherName });
       return [t(1, "08:00", "08:40", "Mathematics", "Room 4", "Mr Kamau"), t(1, "08:40", "09:20", "English", "Room 4", "Ms Achieng"),
@@ -503,7 +602,7 @@ function showLogin(message, good) {
   <main class="login"><form class="login-card" id="loginForm" novalidate>
     <h1>ShuleHub</h1>
     <p class="tag">Your School, Your Learning, Your Future</p>
-    <h3>Student or parent login</h3>
+    <h3>Student, parent or teacher login</h3>
     <label for="em">Email</label>
     <input id="em" type="email" autocomplete="username" inputmode="email" required>
     <label for="pw">Password</label>
@@ -514,7 +613,7 @@ function showLogin(message, good) {
     ${message ? `<p class="msg ${good ? "good" : ""}" role="alert">${esc(message)}</p>` : ""}
     <button class="btn" id="go" type="submit">LOG IN</button>
     <button class="linkbtn" type="button" id="forgot">Forgot password?</button>
-    <p class="hint">Teachers and administrators: please use the ShuleHub app for now. Their web pages are coming soon.</p>
+    <p class="hint">Administrators: please use the ShuleHub app for now. Their web pages are coming soon.</p>
     <p class="hint"><a href="../privacy.html">Privacy policy</a> &middot; <a href="../index.html">About ShuleHub</a></p>
   </form></main>`;
   const em = document.getElementById("em"), pw = document.getElementById("pw");
@@ -544,14 +643,18 @@ function showLogin(message, good) {
 async function enter(u) {
   user = u; role = ""; parent = null; children = []; subject = null; info = {}; cache = {};
   root.innerHTML = '<p class="boot">Loading your account…</p>';
+  // a person with another role may be refused when we look for the wrong kind of profile: go on to the next kind
+  const probe = async (fn) => {
+    try { return await fn(); } catch (e) { if (e && e.code === "permission-denied") return null; throw e; }
+  };
   try {
-    const st = await api.getStudent(u.uid);
+    const st = await probe(() => api.getStudent(u.uid));
     if (st) {
       role = "student";
       await openSubject(st);
       return renderShell();
     }
-    const p = await api.getParent(u.uid);
+    const p = await probe(() => api.getParent(u.uid));
     if (p) {
       role = "parent";
       parent = p;
@@ -563,12 +666,21 @@ async function enter(u) {
       }
       return renderParentHome();
     }
+    const t = await probe(() => api.getTeacher(u.uid));
+    if (t) {
+      role = "teacher"; teacherProfile = t; tScheme = undefined;
+      let inst = "";
+      try { inst = t.institutionId ? await api.institutionName(t.institutionId) : ""; } catch (e) { /* ignore */ }
+      info = { institution: inst };
+      try { setTerms(t.institutionId ? await api.institutionTerms(t.institutionId) : null); } catch (e) { setTerms(null); }
+      return renderTeacherHome();
+    }
   } catch (e) {
     await api.signOut();
     return showLogin("We could not open your account. Please check your internet and try again.");
   }
   await api.signOut();
-  showLogin("This website is for students and parents. Teachers and administrators: please use the ShuleHub app for now.");
+  showLogin("This website is for students, parents and teachers. Administrators: please use the ShuleHub app for now.");
 }
 
 async function openSubject(st) {
@@ -990,6 +1102,224 @@ function wirePay(view) {
         say("This M-Pesa code has already been submitted, or it was not accepted. Check the code, and check that your device's date and time are correct.");
       else say("Could not send. Please check your internet and try again.");
     }
+  };
+}
+
+/* ---------- teacher pages: take attendance and enter class marks ---------- */
+let teacherProfile = null, tUnits = [], tUnit = null, tTab = "attendance", tStudents = null, tScheme;
+const underSlug = (s) => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+const fullClass = (u) => [u.programName, u.levelName, u.semesterName].filter(Boolean).join(" • ");
+const unitTitle = (u) => (u.unitCode ? `${u.unitName} (${u.unitCode})` : u.unitName || "Subject");
+
+// the default exam name carries the term, so two terms never share one report card
+function examNameFor(semesterName) {
+  const base = applyTermsTo("End of term");
+  const t = String(semesterName || "").trim();
+  return t ? t + " - " + base : base;
+}
+// the same result ids as the Android app, so both stay in step
+function resultIdFor(unitName, semesterId, exam) {
+  const u = underSlug(unitName), e = underSlug(exam);
+  const base = u ? `unit_${u}_${semesterId || "none"}` : "unit";
+  return !e || e === "end_of_term" ? base : `${base}_${e}`;
+}
+
+async function renderTeacherHome() {
+  tUnit = null; tStudents = null;
+  root.innerHTML = `${topBar(false)}<main class="wrap">
+    <section class="hero"><h1>${esc(teacherProfile.fullName || user.email || "Teacher")}</h1>
+      <p>${esc(info.institution || "")}<br>Teacher dashboard</p></section>
+    <h2>My subjects</h2>
+    <div id="units"><p class="muted">Loading…</p></div>
+    <footer class="foot">Take attendance and enter class marks here. Homework and messages are in the ShuleHub app. &middot;
+      <a href="../privacy.html">Privacy policy</a></footer></main>`;
+  document.getElementById("out").onclick = () => api.signOut();
+  const box = document.getElementById("units");
+  try {
+    tUnits = (await api.getAssignedUnits(user.uid)).sort((a, b) => unitTitle(a).localeCompare(unitTitle(b)));
+  } catch (e) {
+    box.innerHTML = '<p class="msg" role="alert">Could not load this page. Please check your internet and try again.</p>';
+    return;
+  }
+  if (!tUnits.length) {
+    box.innerHTML = '<div class="empty">No subject has been assigned to you yet. Ask your administrator to assign your subjects.</div>';
+    return;
+  }
+  box.innerHTML = tUnits.map((u, i) => `
+    <button class="card child" data-i="${i}"><div class="row"><div>
+      <h3>${esc(unitTitle(u))}</h3><div class="muted small">${esc(fullClass(u))}</div></div>
+      <span class="chip info">OPEN</span></div></button>`).join("");
+  box.querySelectorAll(".child").forEach((b) => (b.onclick = () => {
+    tUnit = tUnits[Number(b.dataset.i)]; tTab = "attendance"; tStudents = null; renderTeacherUnit();
+  }));
+}
+
+function renderTeacherUnit() {
+  root.innerHTML = `${topBar(false)}<main class="wrap">
+    <section class="hero"><h1>${esc(unitTitle(tUnit))}</h1><p>${esc(fullClass(tUnit))}</p></section>
+    <button class="btn ghost" id="tback" style="margin-top:12px">BACK TO MY SUBJECTS</button>
+    <nav class="tabs" role="tablist" aria-label="Sections" style="margin-top:12px">
+      ${[["attendance", "ATTENDANCE"], ["marks", "CLASS MARKS"]].map(([k, t]) =>
+        `<button class="tab" role="tab" data-tt="${k}" aria-selected="${k === tTab}">${t}</button>`).join("")}
+    </nav>
+    <div id="tview"></div></main>`;
+  document.getElementById("out").onclick = () => api.signOut();
+  document.getElementById("tback").onclick = () => renderTeacherHome();
+  root.querySelectorAll("[data-tt]").forEach((b) => (b.onclick = () => { tTab = b.dataset.tt; renderTeacherUnit(); }));
+  const view = document.getElementById("tview");
+  view.innerHTML = '<p class="muted" style="margin-top:18px">Loading…</p>';
+  const unit = tUnit, mine = tTab;
+  (async () => {
+    try {
+      tStudents ??= await api.getClassStudents(teacherProfile.institutionId, unit);
+      if (unit !== tUnit || mine !== tTab) return;
+      if (mine === "attendance") await wireAttendance(view, unit); else await wireMarks(view, unit);
+    } catch (e) {
+      if (unit !== tUnit || mine !== tTab) return;
+      view.innerHTML = `<p class="msg" role="alert">${e && e.code === "permission-denied"
+        ? "You are not allowed to see this yet. Please try the ShuleHub app, or contact your school."
+        : "Could not load this page. Please check your internet and try again."}</p>`;
+    }
+  })();
+}
+
+const STATUSES = ["present", "late", "absent", "excused"];
+
+async function wireAttendance(view, unit) {
+  if (!tStudents.length) { view.innerHTML = '<div class="empty">No students are assigned to this class yet.</div>'; return; }
+  const status = {}, notes = {};
+  let date = todayStr();
+  view.innerHTML = `
+    <label for="adate">Date</label>
+    <input id="adate" type="date" value="${esc(date)}">
+    <div class="qbtns"><button type="button" class="tab" id="allp">MARK ALL PRESENT</button></div>
+    <div id="arows"></div>
+    <p class="muted small" id="acount"></p>
+    <p class="msg" id="amsg" role="alert" hidden></p>
+    <button class="btn" id="asave" type="button">SAVE ATTENDANCE</button>`;
+  const rows = view.querySelector("#arows"), count = view.querySelector("#acount"), msg = view.querySelector("#amsg");
+  const say = (t, good) => { msg.hidden = !t; msg.textContent = t || ""; msg.className = "msg" + (good ? " good" : ""); };
+
+  function paint() {
+    rows.innerHTML = tStudents.map((s) => {
+      const cur = status[s.uid] || "present";
+      return `<div class="card" style="margin-top:8px"><div class="row"><div><h3>${esc(s.name)}</h3>
+        <div class="muted small">Adm: ${esc(s.admission)}</div></div>
+        <select data-st="${esc(s.uid)}" style="max-width:9.5em" aria-label="Status of ${esc(s.name)}">
+          ${STATUSES.map((x) => `<option value="${x}" ${x === cur ? "selected" : ""}>${statusLabel(x)}</option>`).join("")}
+        </select></div>
+        ${cur !== "present" ? `<input data-note="${esc(s.uid)}" type="text" maxlength="100" value="${esc(notes[s.uid] || "")}"
+          placeholder="Note (optional; the student and parent can see it)" style="margin-top:8px">` : ""}</div>`;
+    }).join("");
+    rows.querySelectorAll("[data-st]").forEach((el) => (el.onchange = () => {
+      status[el.dataset.st] = el.value; if (el.value === "present") delete notes[el.dataset.st]; paint();
+    }));
+    rows.querySelectorAll("[data-note]").forEach((el) => (el.oninput = () => { notes[el.dataset.note] = el.value; }));
+    const c = {}; tStudents.forEach((s) => { const k = status[s.uid] || "present"; c[k] = (c[k] || 0) + 1; });
+    count.textContent = `Present ${c.present || 0}  •  Late ${c.late || 0}  •  Absent ${c.absent || 0}  •  Excused ${c.excused || 0}`;
+  }
+
+  async function loadDate() {
+    say("");
+    Object.keys(status).forEach((k) => delete status[k]); Object.keys(notes).forEach((k) => delete notes[k]);
+    let reg = null;
+    try { reg = await api.getRegister(unit.unitId, date); } catch (e) { /* none saved yet */ }
+    if (reg && reg.records) tStudents.forEach((s) => {
+      if (reg.records[s.uid]) status[s.uid] = reg.records[s.uid];
+      if (reg.notes && reg.notes[s.uid]) notes[s.uid] = reg.notes[s.uid];
+    });
+    paint();
+  }
+
+  view.querySelector("#adate").onchange = (e) => {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) { date = e.target.value; loadDate(); }
+  };
+  view.querySelector("#allp").onclick = () => { tStudents.forEach((s) => { status[s.uid] = "present"; delete notes[s.uid]; }); paint(); };
+  view.querySelector("#asave").onclick = async (ev) => {
+    const btn = ev.currentTarget; btn.disabled = true; btn.textContent = "SAVING…"; say("");
+    const statuses = {}, noteMap = {};
+    tStudents.forEach((s) => {
+      statuses[s.uid] = status[s.uid] || "present";
+      const n = (notes[s.uid] || "").trim();
+      if (statuses[s.uid] !== "present" && n) noteMap[s.uid] = n;
+    });
+    try {
+      await api.saveAttendance({ unit, institutionId: teacherProfile.institutionId, teacherUid: user.uid, date, statuses, notes: noteMap, students: tStudents });
+      const attended = Object.values(statuses).filter((x) => x === "present" || x === "late").length;
+      const absent = Object.values(statuses).filter((x) => x === "absent").length;
+      say(`Attendance saved: ${attended} of ${tStudents.length} attended, ${absent} absent.`, true);
+    } catch (e) {
+      say(e && e.code === "permission-denied"
+        ? "You are not allowed to save this. Check that this subject is assigned to you, or use the ShuleHub app."
+        : "Could not save. Please check your internet and try again.");
+    }
+    btn.disabled = false; btn.textContent = "SAVE ATTENDANCE";
+  };
+  await loadDate();
+}
+
+async function wireMarks(view, unit) {
+  if (!tStudents.length) { view.innerHTML = '<div class="empty">No students are assigned to this class yet.</div>'; return; }
+  if (tScheme === undefined) tScheme = await api.getGrading(teacherProfile.institutionId);
+  const scheme = tScheme;
+  const marks = {};
+  view.innerHTML = `
+    ${scheme ? `<p class="muted small">Grading scale: ${esc(scheme.name)}</p>`
+      : '<div class="note">Your school has not set a grading scale yet. Ask your administrator to open GRADING SCALE in the ShuleHub app. You cannot save marks until then.</div>'}
+    <label for="mexam">Exam (for example CAT 1, Mid-term, End of term)</label>
+    <input id="mexam" type="text" maxlength="60" value="${esc(examNameFor(unit.semesterName))}">
+    <label for="mtotal">Total marks</label>
+    <input id="mtotal" type="number" inputmode="decimal" min="1" step="any" value="100">
+    <div id="mrows"></div>
+    <p class="msg" id="mmsg" role="alert" hidden></p>
+    <button class="btn" id="msave" type="button" ${scheme ? "" : "disabled"}>SAVE ALL MARKS</button>`;
+  const rows = view.querySelector("#mrows"), msg = view.querySelector("#mmsg");
+  const totalEl = view.querySelector("#mtotal"), examEl = view.querySelector("#mexam");
+  const say = (t, good) => { msg.hidden = !t; msg.textContent = t || ""; msg.className = "msg" + (good ? " good" : ""); };
+  const gradeOf = (m, t) => {
+    if (!scheme || !(t > 0) || !Number.isFinite(m)) return null;
+    const pct = (m / t) * 100;
+    return [...scheme.bands].sort((a, b) => b.min - a.min).find((b) => pct >= b.min) || null;
+  };
+  rows.innerHTML = tStudents.map((s) => `<div class="card" style="margin-top:8px"><div class="row"><div>
+      <h3>${esc(s.name)}</h3><div class="muted small">Adm: ${esc(s.admission)}</div></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input data-m="${esc(s.uid)}" type="number" inputmode="decimal" min="0" step="any" style="width:6.5em" aria-label="Marks for ${esc(s.name)}" placeholder="Marks">
+        <b data-g="${esc(s.uid)}" style="min-width:2.4em"></b></div></div></div>`).join("");
+  const regrade = () => {
+    const t = Number(totalEl.value);
+    rows.querySelectorAll("[data-m]").forEach((el) => {
+      const g = gradeOf(Number(el.value), t);
+      rows.querySelector(`[data-g="${CSS.escape(el.dataset.m)}"]`).textContent = el.value.trim() && g ? g.grade : "";
+    });
+  };
+  rows.querySelectorAll("[data-m]").forEach((el) => (el.oninput = () => { marks[el.dataset.m] = el.value; regrade(); }));
+  totalEl.oninput = regrade;
+
+  view.querySelector("#msave").onclick = async (ev) => {
+    const btn = ev.currentTarget; say("");
+    const total = Number(totalEl.value), exam = examEl.value.trim();
+    if (!(total > 0)) return say("Enter the total marks, for example 100.");
+    if (!exam) return say("Enter the exam name.");
+    const entries = [];
+    for (const s of tStudents) {
+      const raw = String(marks[s.uid] ?? "").trim();
+      if (!raw) continue;
+      const m = Number(raw);
+      if (!Number.isFinite(m) || m < 0 || m > total) return say(`Check the marks for ${s.name}. They must be a number from 0 to ${total}.`);
+      entries.push({ student: s, marks: m, band: gradeOf(m, total) });
+    }
+    if (!entries.length) return say("Enter marks for at least one student.");
+    btn.disabled = true; btn.textContent = "SAVING…";
+    try {
+      await api.saveMarks({ unit, institutionId: teacherProfile.institutionId, teacher: teacherProfile, teacherUid: user.uid, exam, total, entries });
+      say(`Saved marks for ${entries.length} student${entries.length === 1 ? "" : "s"} (${exam}). Grades came from your school's grading scale.`, true);
+    } catch (e) {
+      say(e && e.code === "permission-denied"
+        ? "You are not allowed to save these marks. Check that this subject is assigned to you, or use the ShuleHub app."
+        : "Could not save. Please check your internet and try again.");
+    }
+    btn.disabled = false; btn.textContent = "SAVE ALL MARKS";
   };
 }
 
