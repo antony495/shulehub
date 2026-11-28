@@ -1,4 +1,4 @@
-/* ShuleHub Web - student and parent portal (version 11, teacher pages)
+/* ShuleHub Web - student and parent portal (version 12, administrator payments)
    Uses the same Firebase project as the Android app. Read-only for now. */
 
 const firebaseConfig = {
@@ -104,7 +104,7 @@ const SW_PHRASES = [
   [/\bForm (\d+)\b/gi, "Kidato $1"], [/\bGrade (\d+)\b/gi, "Darasa la $1"], [/\bYear (\d+)\b/gi, "Mwaka wa $1"],
   [/(\d+) out of (\d+)/g, "$1 kati ya $2"],
   ["Administrators: please use the ShuleHub app for now. Their web pages are coming soon.", "Walimu na wasimamizi: tafadhali tumia programu ya ShuleHub kwa sasa. Kurasa zao za wavuti zinakuja hivi karibuni."],
-  ["This website is for students, parents and teachers. Administrators: please use the ShuleHub app for now.", "Tovuti hii ni ya wanafunzi na wazazi. Walimu na wasimamizi: tafadhali tumia programu ya ShuleHub kwa sasa."],
+  ["This website is for students, parents, teachers and administrators.", "Tovuti hii ni ya wanafunzi na wazazi. Walimu na wasimamizi: tafadhali tumia programu ya ShuleHub kwa sasa."],
   ["Your School, Your Learning, Your Future", "Shule Yako, Masomo Yako, Kesho Yako"],
   ["Student or parent login", "Kuingia kwa mwanafunzi au mzazi"],
   ["Type your email above first, then tap Forgot password.", "Andika barua pepe yako juu kwanza, kisha bonyeza Umesahau nenosiri."],
@@ -128,7 +128,7 @@ const SW_PHRASES = [
   ["PART PAID", "IMELIPWA SEHEMU"],
   ["Student, parent or teacher login", "Kuingia kwa mwanafunzi, mzazi au mwalimu"],
   ["Administrators: please use the ShuleHub app for now. Their web pages are coming soon.", "Wasimamizi: tafadhali tumia programu ya ShuleHub kwa sasa. Kurasa zao za wavuti zinakuja hivi karibuni."],
-  ["This website is for students, parents and teachers. Administrators: please use the ShuleHub app for now.", "Tovuti hii ni ya wanafunzi, wazazi na walimu. Wasimamizi: tafadhali tumia programu ya ShuleHub kwa sasa."],
+  ["This website is for students, parents, teachers and administrators.", "Tovuti hii ni ya wanafunzi, wazazi na walimu. Wasimamizi: tafadhali tumia programu ya ShuleHub kwa sasa."],
   ["Take attendance and enter class marks here. Homework and messages are in the ShuleHub app.", "Chukua mahudhurio na weka alama za darasa hapa. Kazi za nyumbani na ujumbe ziko kwenye programu ya ShuleHub."],
   ["No subject has been assigned to you yet. Ask your administrator to assign your subjects.", "Hujapewa somo lolote bado. Muulize msimamizi wako akupe masomo."],
   ["No students are assigned to this class yet.", "Hakuna wanafunzi waliowekwa kwenye darasa hili bado."],
@@ -146,6 +146,21 @@ const SW_PHRASES = [
   ["BACK TO MY SUBJECTS", "RUDI KWA MASOMO YANGU"], ["My subjects", "Masomo yangu"], ["Teacher dashboard", "Ukurasa wa mwalimu"],
   ["MARK ALL PRESENT", "WEKA WOTE WAMEHUDHURIA"], ["SAVE ATTENDANCE", "HIFADHI MAHUDHURIO"], ["SAVE ALL MARKS", "HIFADHI ALAMA ZOTE"],
   ["CLASS MARKS", "ALAMA ZA DARASA"], ["SAVING…", "INAHIFADHI…"], ["Total marks", "Jumla ya alama"], ["Date", "Tarehe"],
+  ["Login", "Kuingia"],
+  ["Confirm or reject fee payments here. Everything else is in the ShuleHub app.", "Thibitisha au kataa malipo ya ada hapa. Mengine yote yako kwenye programu ya ShuleHub."],
+  ["No payments are waiting for you.", "Hakuna malipo yanayokusubiri."],
+  ["Payments to confirm", "Malipo ya kuthibitisha"], ["Administrator dashboard", "Ukurasa wa msimamizi"],
+  ["Payment confirmed.", "Malipo yamethibitishwa."], ["Payment rejected.", "Malipo yamekataliwa."],
+  ["This payment was already processed.", "Malipo haya yameshashughulikiwa."], ["The fee record no longer exists.", "Rekodi ya ada haipo tena."],
+  ["The extra money could not be added to the next fees. Please check it in the ShuleHub app.", "Pesa ya ziada haikuweza kuongezwa kwenye ada zinazofuata. Tafadhali angalia kwenye programu ya ShuleHub."],
+  ["Could not confirm the payment. Please check your internet and try again.", "Imeshindikana kuthibitisha malipo. Tafadhali angalia intaneti na ujaribu tena."],
+  ["Could not reject the payment. Please check your internet and try again.", "Imeshindikana kukataa malipo. Tafadhali angalia intaneti na ujaribu tena."],
+  ["You are not allowed to confirm this. Please use the ShuleHub app.", "Huruhusiwi kuthibitisha hili. Tafadhali tumia programu ya ShuleHub."],
+  ["You are not allowed to reject this. Please use the ShuleHub app.", "Huruhusiwi kukataa hili. Tafadhali tumia programu ya ShuleHub."],
+  ["Please enter a reason for rejecting.", "Tafadhali andika sababu ya kukataa."],
+  ["Or reject it. Reason (shown to the student)", "Au ikatae. Sababu (itaonyeshwa kwa mwanafunzi)"],
+  ["Admission number:", "Nambari ya usajili:"], ["Paid from:", "Imelipwa kutoka:"], ["Paid by parent:", "Imelipwa na mzazi:"], ["Submitted:", "Imetumwa:"],
+  ["CONFIRM PAYMENT", "THIBITISHA MALIPO"], ["REJECT PAYMENT", "KATAA MALIPO"], ["PLEASE WAIT…", "TAFADHALI SUBIRI…"], ["REVIEW", "KAGUA"], ["CLOSE", "FUNGA"],
   ["No child is linked to your account yet. Use the ShuleHub app to add a child.", "Hakuna mtoto aliyeunganishwa na akaunti yako bado. Tumia programu ya ShuleHub kuongeza mtoto."],
   ["No fees have been recorded yet.", "Hakuna ada iliyorekodiwa bado."],
   ["No results have been published yet. Please check again later.", "Hakuna matokeo yaliyochapishwa bado. Tafadhali angalia tena baadaye."],
@@ -480,6 +495,56 @@ async function makeFirebase() {
         await batch.commit();
       }
     },
+    // ----- administrators: payments -----
+    async getAdmin(uid) {
+      const s = await fs.getDoc(fs.doc(db, "admins", uid));
+      return s.exists() ? { id: s.id, ...s.data() } : null;
+    },
+    async getPendingPayments(inst) {
+      const q = fs.query(fs.collection(db, "payment_submissions"), fs.where("institutionId", "==", inst), fs.where("status", "==", "pending"));
+      return docs(await fs.getDocs(q));
+    },
+    // the same steps as the app: one transaction for the fee and the payment, then any extra money goes to the next fees
+    async confirmPayment(p, adminUid) {
+      const subRef = fs.doc(db, "payment_submissions", p.id);
+      const feeRef = fs.doc(db, "students", p.studentUid, "fee_records", p.feeId);
+      const extra = await fs.runTransaction(db, async (tx) => {
+        const sub = await tx.get(subRef);
+        if (sub.get("status") !== "pending") throw Object.assign(new Error("done"), { userMessage: "This payment was already processed." });
+        const fee = await tx.get(feeRef);
+        if (!fee.exists()) throw Object.assign(new Error("nofee"), { userMessage: "The fee record no longer exists." });
+        const due = num(fee.get("amountDue") ?? fee.get("amount"));
+        const before = num(fee.get("amountPaid"));
+        const applied = Math.min(num(p.amount), Math.max(due - before, 0));
+        const paid = before + applied;
+        tx.update(feeRef, { amountPaid: paid, status: paid >= due ? "Paid" : "Partially paid",
+          transactionReference: p.mpesaCode || p.id, lastPaymentAt: Date.now() });
+        tx.update(subRef, { status: "confirmed", confirmedBy: adminUid, confirmedAt: Date.now() });
+        return num(p.amount) - applied;
+      });
+      if (extra <= 0.004) return {};
+      try {
+        const col = fs.collection(db, "students", p.studentUid, "fee_records");
+        const snap = await fs.getDocs(col);
+        const open = snap.docs.filter((d) => d.id !== p.feeId).map((d) => ({ d, due: num(d.get("amountDue") ?? d.get("amount")), paid: num(d.get("amountPaid")) }))
+          .filter((x) => x.due - x.paid > 0.004)
+          .sort((a, b) => String(a.d.get("dueDate") || "9999-99-99").localeCompare(String(b.d.get("dueDate") || "9999-99-99")) || num(a.d.get("createdAt")) - num(b.d.get("createdAt")));
+        const batch = fs.writeBatch(db);
+        let left = extra;
+        for (const x of open) {
+          if (left <= 0.004) break;
+          const use = Math.min(left, x.due - x.paid), np = x.paid + use;
+          batch.update(x.d.ref, { amountPaid: np, status: np >= x.due - 0.004 ? "Paid" : "Partially paid", lastPaymentAt: Date.now() });
+          left -= use;
+        }
+        if (left > 0.004) batch.update(fs.doc(db, "students", p.studentUid, "fee_records", p.feeId), { amountPaid: fs.increment(left) });
+        await batch.commit();
+      } catch (e) {
+        return { warning: "The extra money could not be added to the next fees. Please check it in the ShuleHub app." };
+      }
+      return {};
+    },
+    rejectPayment: (p, reason) => fs.updateDoc(fs.doc(db, "payment_submissions", p.id), { status: "rejected", rejectReason: reason, rejectedAt: Date.now() }),
     // the document id is schoolId_code, so one school cannot block another school's code,
     // and sending the same code twice to the same school is refused by the rules
     submitPayment: (data) => fs.setDoc(fs.doc(db, "payment_submissions", data.institutionId + "_" + data.mpesaCode), data),
@@ -494,6 +559,10 @@ function makeDemo() {
     { id: "RTX4P0QW1Z", mpesaCode: "RTX4P0QW1Z", amount: 5000, feeDescription: "Term 3 fees", status: "rejected", rejectReason: "Code not found in school M-Pesa statement", createdAt: Date.now() - 5 * 864e5 },
   ];
   const now = Date.now();
+  const demoPending = [
+    { id: "i_QGH7K2LM9P", mpesaCode: "QGH7K2LM9P", studentName: "Brian Otieno (demo)", admissionNumber: "ADM-0231", amount: 12000, feeDescription: "Term 3 fees", phone: "0712345678", createdAt: now - 3e6, status: "pending" },
+    { id: "i_RTX4P0QW1Z", mpesaCode: "RTX4P0QW1Z", studentName: "Faith Otieno (demo)", admissionNumber: "ADM-0310", amount: 5000, feeDescription: "Trip to Nairobi", phone: "0722000111", parentName: "Mrs Otieno", createdAt: now - 9e6, status: "pending" },
+  ];
   const kids = {
     c1: { id: "c1", fullName: "Brian Otieno (demo)", admission: "ADM-0231", institutionId: "i", programId: "p", levelId: "l", semesterId: "s",
           programName: "Secondary", levelName: "Form 2", semesterName: "Term 3" },
@@ -505,8 +574,8 @@ function makeDemo() {
   return {
     onUser: (f) => { cb = f; setTimeout(() => f(null), 0); return () => {}; },
     signIn: async (email) => {
-      role = /teacher/i.test(email) ? "teacher" : /parent/i.test(email) ? "parent" : "student";
-      setTimeout(() => cb && cb({ uid: role === "parent" ? "dp" : role === "teacher" ? "dt" : "demo", email }), 50);
+      role = /admin/i.test(email) ? "admin" : /teacher/i.test(email) ? "teacher" : /parent/i.test(email) ? "parent" : "student";
+      setTimeout(() => cb && cb({ uid: role === "parent" ? "dp" : role === "teacher" ? "dt" : role === "admin" ? "da" : "demo", email }), 50);
     },
     signOut: async () => { cb && cb(null); },
     resetPassword: async () => {},
@@ -565,6 +634,10 @@ function makeDemo() {
       { min: 80, grade: "A", points: 12, remark: "Excellent" }, { min: 60, grade: "B", points: 9, remark: "Good" },
       { min: 40, grade: "C", points: 6, remark: "Fair" }, { min: 0, grade: "E", points: 1, remark: "Very poor" }] }),
     saveMarks: async (x) => { window.__marks = x; },
+    getAdmin: async (uid) => (uid === "da" ? { id: "da", fullName: "Mrs Njeri (demo)", email: "admin@example.com", institutionId: "i" } : null),
+    getPendingPayments: async () => demoPending.slice(),
+    confirmPayment: async (p) => { const i = demoPending.findIndex((x) => x.id === p.id); if (i >= 0) demoPending.splice(i, 1); window.__confirmed = p; return {}; },
+    rejectPayment: async (p, reason) => { const i = demoPending.findIndex((x) => x.id === p.id); if (i >= 0) demoPending.splice(i, 1); window.__rejected = [p.id, reason]; },
     getTimetable: async () => {
       const t = (day, s, e, subject, room, teacherName) => ({ id: day + s, day, startTime: s, endTime: e, subject, room, teacherName });
       return [t(1, "08:00", "08:40", "Mathematics", "Room 4", "Mr Kamau"), t(1, "08:40", "09:20", "English", "Room 4", "Ms Achieng"),
@@ -602,7 +675,7 @@ function showLogin(message, good) {
   <main class="login"><form class="login-card" id="loginForm" novalidate>
     <h1>ShuleHub</h1>
     <p class="tag">Your School, Your Learning, Your Future</p>
-    <h3>Student, parent or teacher login</h3>
+    <h3>Login</h3>
     <label for="em">Email</label>
     <input id="em" type="email" autocomplete="username" inputmode="email" required>
     <label for="pw">Password</label>
@@ -613,8 +686,7 @@ function showLogin(message, good) {
     ${message ? `<p class="msg ${good ? "good" : ""}" role="alert">${esc(message)}</p>` : ""}
     <button class="btn" id="go" type="submit">LOG IN</button>
     <button class="linkbtn" type="button" id="forgot">Forgot password?</button>
-    <p class="hint">Administrators: please use the ShuleHub app for now. Their web pages are coming soon.</p>
-    <p class="hint"><a href="../privacy.html">Privacy policy</a> &middot; <a href="../index.html">About ShuleHub</a></p>
+        <p class="hint"><a href="../privacy.html">Privacy policy</a> &middot; <a href="../index.html">About ShuleHub</a></p>
   </form></main>`;
   const em = document.getElementById("em"), pw = document.getElementById("pw");
   document.getElementById("eye").onclick = (e) => {
@@ -675,12 +747,21 @@ async function enter(u) {
       try { setTerms(t.institutionId ? await api.institutionTerms(t.institutionId) : null); } catch (e) { setTerms(null); }
       return renderTeacherHome();
     }
+    const a = await probe(() => api.getAdmin(u.uid));
+    if (a) {
+      role = "admin"; adminProfile = a; aPays = null; aOpen = ""; aMsg = "";
+      let inst = "";
+      try { inst = a.institutionId ? await api.institutionName(a.institutionId) : ""; } catch (e) { /* ignore */ }
+      info = { institution: inst };
+      try { setTerms(a.institutionId ? await api.institutionTerms(a.institutionId) : null); } catch (e) { setTerms(null); }
+      return renderAdminHome();
+    }
   } catch (e) {
     await api.signOut();
     return showLogin("We could not open your account. Please check your internet and try again.");
   }
   await api.signOut();
-  showLogin("This website is for students, parents and teachers. Administrators: please use the ShuleHub app for now.");
+  showLogin("This website is for students, parents, teachers and administrators.");
 }
 
 async function openSubject(st) {
@@ -1321,6 +1402,84 @@ async function wireMarks(view, unit) {
     }
     btn.disabled = false; btn.textContent = "SAVE ALL MARKS";
   };
+}
+
+/* ---------- administrator page: confirm or reject payments ---------- */
+let adminProfile = null, aPays = null, aOpen = "", aMsg = "";
+const when = (t) => (t ? new Date(t).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
+
+async function renderAdminHome() {
+  root.innerHTML = `${topBar(false)}<main class="wrap">
+    <section class="hero"><h1>${esc(adminProfile.fullName || user.email || "Administrator")}</h1>
+      <p>${esc(info.institution || "")}<br>Administrator dashboard</p></section>
+    <h2>Payments to confirm</h2>
+    <div id="apay"><p class="muted">Loading…</p></div>
+    <footer class="foot">Confirm or reject fee payments here. Everything else is in the ShuleHub app. &middot;
+      <a href="../privacy.html">Privacy policy</a></footer></main>`;
+  document.getElementById("out").onclick = () => api.signOut();
+  const box = document.getElementById("apay");
+  try {
+    aPays = (await api.getPendingPayments(adminProfile.institutionId)).sort((a, b) => ms(a.createdAt) - ms(b.createdAt));
+  } catch (e) {
+    box.innerHTML = `<p class="msg" role="alert">${e && e.code === "permission-denied"
+      ? "You are not allowed to see this yet. Please try the ShuleHub app, or contact your school."
+      : "Could not load this page. Please check your internet and try again."}</p>`;
+    return;
+  }
+  paintAdminPays();
+}
+
+function paintAdminPays() {
+  const box = document.getElementById("apay");
+  const note = aMsg ? `<p class="msg good" role="alert">${esc(aMsg)}</p>` : "";
+  if (!aPays.length) { box.innerHTML = note + '<div class="empty">No payments are waiting for you.</div>'; return; }
+  box.innerHTML = note + aPays.map((p) => {
+    const code = p.mpesaCode || p.id, open = aOpen === p.id;
+    return `<div class="card" style="margin-top:8px">
+      <button class="linkbtn" data-open="${esc(p.id)}" style="text-align:left;width:100%"><div class="row"><div>
+        <h3>${esc(p.studentName || "Student")} &middot; ${esc(ksh(p.amount))}</h3>
+        <div class="muted small">${esc(p.feeDescription || "Fee")} &middot; ${esc(code)}</div></div>
+        <span class="chip warn">${open ? "CLOSE" : "REVIEW"}</span></div></button>
+      ${open ? `<div style="margin-top:10px">
+        <div class="muted small">Admission number: ${esc(p.admissionNumber || "")}</div>
+        <div class="muted small">M-Pesa code: <b>${esc(code)}</b></div>
+        <div class="muted small">Paid from: ${esc(p.phone || "")}</div>
+        ${p.parentName ? `<div class="muted small">Paid by parent: ${esc(p.parentName)}</div>` : ""}
+        <div class="muted small">Submitted: ${esc(when(num(p.createdAt)))}</div>
+        <p class="msg" id="rmsg" role="alert" hidden></p>
+        <button class="btn" data-ok="${esc(p.id)}" type="button">CONFIRM PAYMENT</button>
+        <label for="rr">Or reject it. Reason (shown to the student)</label>
+        <input id="rr" type="text" maxlength="120">
+        <button class="btn ghost" data-no="${esc(p.id)}" type="button">REJECT PAYMENT</button></div>` : ""}</div>`;
+  }).join("");
+  const find = (id) => aPays.find((x) => x.id === id);
+  const say = (t) => { const m = document.getElementById("rmsg"); if (m) { m.hidden = !t; m.textContent = t || ""; } };
+  box.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { aOpen = aOpen === b.dataset.open ? "" : b.dataset.open; aMsg = ""; paintAdminPays(); }));
+  box.querySelectorAll("[data-ok]").forEach((b) => (b.onclick = async () => {
+    b.disabled = true; b.textContent = "PLEASE WAIT…"; say("");
+    try {
+      const r = await api.confirmPayment(find(b.dataset.ok), user.uid);
+      aMsg = "Payment confirmed." + (r && r.warning ? " " + r.warning : "");
+      aPays = aPays.filter((x) => x.id !== b.dataset.ok); aOpen = ""; paintAdminPays();
+    } catch (e) {
+      b.disabled = false; b.textContent = "CONFIRM PAYMENT";
+      say(e && e.code === "permission-denied" ? "You are not allowed to confirm this. Please use the ShuleHub app."
+        : e && e.userMessage ? e.userMessage : "Could not confirm the payment. Please check your internet and try again.");
+    }
+  }));
+  box.querySelectorAll("[data-no]").forEach((b) => (b.onclick = async () => {
+    const reason = (document.getElementById("rr").value || "").trim();
+    if (!reason) return say("Please enter a reason for rejecting.");
+    b.disabled = true; say("");
+    try {
+      await api.rejectPayment(find(b.dataset.no), reason);
+      aMsg = "Payment rejected."; aPays = aPays.filter((x) => x.id !== b.dataset.no); aOpen = ""; paintAdminPays();
+    } catch (e) {
+      b.disabled = false;
+      say(e && e.code === "permission-denied" ? "You are not allowed to reject this. Please use the ShuleHub app."
+        : "Could not reject the payment. Please check your internet and try again.");
+    }
+  }));
 }
 
 /* ---------- start ---------- */
